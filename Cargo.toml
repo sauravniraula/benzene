@@ -1,0 +1,8 @@
+[package]
+name = "vulkan_engine"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ash = { version = "0.38.0", features = ["linked"] }
+glfw = { version = "0.59.0", features = ["vulkan"] }
