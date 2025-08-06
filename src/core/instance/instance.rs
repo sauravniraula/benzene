@@ -1,7 +1,6 @@
 use ash::ext::debug_utils;
 use ash::{Entry, Instance, vk};
 use std::ffi::CString;
-use std::io::Result;
 
 use crate::core::window::VWindow;
 
@@ -13,10 +12,10 @@ pub struct VInstance {
 }
 
 impl VInstance {
-    pub fn new(v_window: &VWindow, config: super::VInstanceConfig) -> Result<Self> {
+    pub fn new(v_window: &VWindow, config: super::VInstanceConfig) -> Self {
         let entry = Entry::linked();
 
-        let app_name = CString::new(config.application_name)?;
+        let app_name = CString::new(config.application_name).unwrap();
         let app_info = vk::ApplicationInfo::default()
             .api_version(vk::make_api_version(0, 1, 0, 0))
             .application_name(&app_name)
@@ -60,19 +59,19 @@ impl VInstance {
         if config.enable_debug {
             let (debug_instance, debug_messenger) =
                 VInstance::setup_debug_messenger(&entry, &instance);
-            return Ok(Self {
+            return Self {
                 instance,
                 entry,
                 debug_instance: Some(debug_instance),
                 debug_messenger: Some(debug_messenger),
-            });
+            };
         } else {
-            return Ok(Self {
+            return Self {
                 instance,
                 entry,
                 debug_instance: None,
                 debug_messenger: None,
-            });
+            };
         }
     }
 

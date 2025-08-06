@@ -2,18 +2,18 @@ use ash::vk;
 
 use crate::core::{device::config::VPhysicalDeviceConfig, instance::VInstance, surface::VSurface};
 
-pub struct VPhysicalDevice<'a> {
+pub struct VPhysicalDevice {
     pub physical_device: vk::PhysicalDevice,
     pub surface_formats: Vec<vk::SurfaceFormatKHR>,
     pub present_modes: Vec<vk::PresentModeKHR>,
     pub queue_families: Vec<vk::QueueFamilyProperties>,
     pub surface_capabilities: vk::SurfaceCapabilitiesKHR,
+    pub memory_properties: vk::PhysicalDeviceMemoryProperties,
     pub score: usize,
     pub required_extensions: Vec<String>,
-    pub v_surface: &'a VSurface,
 }
 
-impl<'a> VPhysicalDevice<'a> {
+impl VPhysicalDevice {
     pub fn get_queue_family(&self, flag: vk::QueueFlags) -> u32 {
         let mut queue_index: u32 = 0;
         for i in 0..self.queue_families.len() {
@@ -25,15 +25,15 @@ impl<'a> VPhysicalDevice<'a> {
         queue_index
     }
 
-    pub fn get_present_queue_family_index(&self) -> Option<u32> {
+    pub fn get_present_queue_family_index(&self, v_surface: &VSurface) -> Option<u32> {
         for i in 0..self.queue_families.len() {
             let supports_surface = unsafe {
-                self.v_surface
+                v_surface
                     .surface_instance
                     .get_physical_device_surface_support(
                         self.physical_device,
                         i as u32,
-                        self.v_surface.surface,
+                        v_surface.surface,
                     )
                     .expect("failed to get device surface support")
             };
@@ -72,11 +72,28 @@ impl<'a> VPhysicalDevice<'a> {
         image_count
     }
 
+    pub fn find_memory_type_index(
+        &self,
+        memory_type: u32,
+        properties: vk::MemoryPropertyFlags,
+    ) -> Option<u32> {
+        for i in 0..self.memory_properties.memory_type_count {
+            if memory_type & (1 << i) != 0
+                && self.memory_properties.memory_types[i as usize]
+                    .property_flags
+                    .contains(properties)
+            {
+                return Some(i);
+            }
+        }
+        None
+    }
+
     pub fn get_compatible_devices(
         v_instance: &VInstance,
-        v_surface: &'a VSurface,
+        v_surface: &VSurface,
         config: VPhysicalDeviceConfig,
-    ) -> Vec<VPhysicalDevice<'a>> {
+    ) -> Vec<VPhysicalDevice> {
         let physical_devices = unsafe {
             v_instance
                 .instance
@@ -152,6 +169,12 @@ impl<'a> VPhysicalDevice<'a> {
                     .expect("failed to get device surface capabilities")
             };
 
+            let memory_properties = unsafe {
+                v_instance
+                    .instance
+                    .get_physical_device_memory_properties(each_device)
+            };
+
             let score = surface_formats.len() + present_modes.len() + queue_families.len();
             compatible_physical_devices.push(VPhysicalDevice {
                 physical_device: each_device,
@@ -159,9 +182,9 @@ impl<'a> VPhysicalDevice<'a> {
                 present_modes,
                 queue_families,
                 surface_capabilities,
+                memory_properties,
                 score,
                 required_extensions: config.required_extensions.clone(),
-                v_surface,
             });
         }
 

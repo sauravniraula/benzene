@@ -1,5 +1,6 @@
 use std::ffi::CString;
 
+use crate::core::surface::VSurface;
 use crate::core::{device::VPhysicalDevice, instance::VInstance};
 use ash::Device;
 use ash::vk;
@@ -14,11 +15,15 @@ pub struct VDevice {
 }
 
 impl VDevice {
-    pub fn new(v_instance: &VInstance, v_physical_device: &VPhysicalDevice) -> Self {
+    pub fn new(
+        v_instance: &VInstance,
+        v_surface: &VSurface,
+        v_physical_device: &VPhysicalDevice,
+    ) -> Self {
         let graphics_queue_family_index =
             v_physical_device.get_queue_family(vk::QueueFlags::GRAPHICS);
         let present_queue_family_index = v_physical_device
-            .get_present_queue_family_index()
+            .get_present_queue_family_index(v_surface)
             .expect("failed to find present queue");
 
         let mut unique_queue_family_indices = vec![graphics_queue_family_index];

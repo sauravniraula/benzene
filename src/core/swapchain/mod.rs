@@ -7,6 +7,9 @@ pub struct VSwapchain {
     pub image_count: u32,
     pub image_extent: vk::Extent2D,
     pub format: vk::Format,
+    pub images: Vec<vk::Image>,
+    pub image_views: Vec<vk::ImageView>,
+    pub subresource_range: vk::ImageSubresourceRange,
 }
 
 impl VSwapchain {
@@ -22,9 +25,9 @@ impl VSwapchain {
         let image_count = v_physical_device.select_swapchain_image_count();
         let image_extent = VSwapchain::select_image_extent(&v_window, &v_physical_device);
         let surface_format = v_physical_device.select_surface_format();
-        let create_info = vk::SwapchainCreateInfoKHR::default()
+        let mut create_info = vk::SwapchainCreateInfoKHR::default()
             .surface(v_surface.surface)
-            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST)
             .pre_transform(v_physical_device.surface_capabilities.current_transform)
             .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
             .image_array_layers(1)
@@ -33,11 +36,44 @@ impl VSwapchain {
             .image_format(surface_format.format)
             .image_color_space(surface_format.color_space);
 
+        if v_device.unique_queue_family_indices.len() > 1 {
+            create_info = create_info
+                .image_sharing_mode(vk::SharingMode::CONCURRENT)
+                .queue_family_indices(&v_device.unique_queue_family_indices);
+        }
+
         let swapchain = unsafe {
             swapchain_device
                 .create_swapchain(&create_info, None)
                 .expect("failed to create swapchain")
         };
+
+        let images = unsafe {
+            swapchain_device
+                .get_swapchain_images(swapchain)
+                .expect("failed to get swapchain images")
+        };
+
+        let subresource_range = vk::ImageSubresourceRange::default()
+            .aspect_mask(vk::ImageAspectFlags::COLOR)
+            .level_count(1)
+            .layer_count(1);
+
+        let image_views: Vec<vk::ImageView> = images
+            .iter()
+            .map(|image| unsafe {
+                let create_info = vk::ImageViewCreateInfo::default()
+                    .image(*image)
+                    .subresource_range(subresource_range)
+                    .view_type(vk::ImageViewType::TYPE_2D)
+                    .format(surface_format.format);
+
+                v_device
+                    .device
+                    .create_image_view(&create_info, None)
+                    .expect("failed to create image view")
+            })
+            .collect();
 
         Self {
             swapchain_device,
@@ -45,6 +81,9 @@ impl VSwapchain {
             image_count,
             image_extent,
             format: surface_format.format,
+            images,
+            image_views,
+            subresource_range,
         }
     }
 

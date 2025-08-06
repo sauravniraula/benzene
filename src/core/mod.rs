@@ -1,5 +1,9 @@
-pub mod instance;
-pub mod window;
 pub mod device;
-pub mod swapchain;
+pub mod instance;
+pub mod pipeline;
+pub mod rendering;
 pub mod surface;
+pub mod swapchain;
+pub mod window;
+pub mod vertex_input;
+pub mod memory;

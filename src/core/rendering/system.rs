@@ -1,0 +1,166 @@
+use crate::core::{device::VDevice, rendering::VRenderingSystemConfig, swapchain::VSwapchain};
+use ash::vk::{self, Extent2D, Offset2D, Rect2D};
+
+pub struct VRenderingSystem {
+    pub render_pass: vk::RenderPass,
+    pub pipelines: Vec<vk::Pipeline>,
+    pub render_area: Rect2D,
+    pub framebuffers: Vec<vk::Framebuffer>,
+}
+
+impl VRenderingSystem {
+    pub fn new(
+        v_device: &VDevice,
+        v_swapchain: &VSwapchain,
+        config: VRenderingSystemConfig,
+    ) -> Self {
+        let subpasses = [vk::SubpassDescription::default()];
+
+        let render_pass_info = vk::RenderPassCreateInfo::default().subpasses(&subpasses);
+
+        let render_pass = unsafe {
+            v_device
+                .device
+                .create_render_pass(&render_pass_info, None)
+                .expect("failed to create render pass")
+        };
+
+        let framebuffers = VRenderingSystem::create_framebuffers(
+            v_device,
+            render_pass,
+            &v_swapchain.image_views,
+            v_swapchain.image_extent,
+        );
+
+        let mut pipeline_create_infos = Vec::new();
+
+        let mut vertex_input_states = Vec::new();
+        let mut input_assembly_states = Vec::new();
+        let mut shader_stages = Vec::new();
+        let mut rasterization_states = Vec::new();
+        let mut dynamic_states = Vec::new();
+        let mut viewport_states = Vec::new();
+
+        for info in &config.pipeline_infos {
+            let vertex_input_state = info
+                .get_vertex_input_stage()
+                .vertex_binding_descriptions(&config.binding_descriptions)
+                .vertex_attribute_descriptions(&config.attribute_descriptions);
+
+            vertex_input_states.push(vertex_input_state);
+            input_assembly_states.push(info.get_input_assembly_stage());
+            shader_stages.push(info.get_shader_stages());
+            rasterization_states.push(info.get_rasterization_stage());
+            dynamic_states.push(info.get_dynamic_state());
+            viewport_states.push(info.get_viewport_state());
+        }
+
+        for i in 0..config.pipeline_infos.len() {
+            let pipeline_create_info = vk::GraphicsPipelineCreateInfo::default()
+                .render_pass(render_pass)
+                .vertex_input_state(&vertex_input_states[i])
+                .input_assembly_state(&input_assembly_states[i])
+                .stages(&shader_stages[i])
+                .rasterization_state(&rasterization_states[i])
+                .dynamic_state(&dynamic_states[i])
+                .viewport_state(&viewport_states[i])
+                .layout(config.pipeline_infos[i].layout);
+            pipeline_create_infos.push(pipeline_create_info);
+        }
+
+        let pipelines = unsafe {
+            Vec::from(
+                v_device
+                    .device
+                    .create_graphics_pipelines(
+                        vk::PipelineCache::null(),
+                        &pipeline_create_infos,
+                        None,
+                    )
+                    .expect("failed to create pipelines"),
+            )
+        };
+
+        Self {
+            render_pass,
+            pipelines,
+            render_area: Rect2D {
+                offset: Offset2D { x: 0, y: 0 },
+                extent: v_swapchain.image_extent,
+            },
+            framebuffers,
+        }
+    }
+
+    pub fn create_framebuffers(
+        v_device: &VDevice,
+        render_pass: vk::RenderPass,
+        image_views: &Vec<vk::ImageView>,
+        image_extent: Extent2D,
+    ) -> Vec<vk::Framebuffer> {
+        (0..image_views.len())
+            .map(|i| {
+                let info = vk::FramebufferCreateInfo::default()
+                    .attachment_count(1)
+                    .attachments(&image_views[i..i + 1])
+                    .render_pass(render_pass)
+                    .width(image_extent.width)
+                    .height(image_extent.height)
+                    .layers(1);
+                unsafe {
+                    v_device
+                        .device
+                        .create_framebuffer(&info, None)
+                        .expect("failed to create framebuffer")
+                }
+            })
+            .collect()
+    }
+
+    pub fn start(&self, v_device: &VDevice, command_buffer: vk::CommandBuffer, image_index: usize) {
+        let mut clear_values = [vk::ClearValue::default()];
+        clear_values[0].color = vk::ClearColorValue {
+            float32: [1.0, 1.0, 1.0, 1.0],
+        };
+        let begin_info = vk::RenderPassBeginInfo::default()
+            .clear_values(&clear_values)
+            .framebuffer(self.framebuffers[image_index])
+            .render_area(self.render_area);
+
+        unsafe {
+            v_device.device.cmd_begin_render_pass(
+                command_buffer,
+                &begin_info,
+                vk::SubpassContents::INLINE,
+            );
+
+            for each_pipeline in self.pipelines.iter() {
+                v_device.device.cmd_bind_pipeline(
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    *each_pipeline,
+                );
+            }
+
+            let viewport = vk::Viewport::default()
+                .height(self.render_area.extent.height as f32)
+                .width(self.render_area.extent.width as f32)
+                .x(0f32)
+                .y(0f32)
+                .min_depth(0f32)
+                .max_depth(1f32);
+            v_device
+                .device
+                .cmd_set_viewport(command_buffer, 0, &[viewport]);
+            v_device
+                .device
+                .cmd_set_scissor(command_buffer, 0, &[self.render_area]);
+        };
+    }
+
+    pub fn end(&self, v_device: &VDevice, command_buffer: vk::CommandBuffer) {
+        unsafe {
+            v_device.device.cmd_end_render_pass(command_buffer);
+        }
+    }
+}

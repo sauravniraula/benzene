@@ -1,16 +1,17 @@
 use vulkan_engine::core::{
     device::{VDevice, VPhysicalDevice, config::VPhysicalDeviceConfig},
     instance::{VInstance, VInstanceConfig},
+    rendering::{VRenderer, basic_system::BasicRenderingSystem},
     surface::VSurface,
     swapchain::VSwapchain,
+    vertex_input::Vertex,
     window::{VWindow, VWindowConfig},
 };
 
 fn main() {
-    let v_window = VWindow::new(VWindowConfig::default()).expect("failed to create Vwindow");
+    let v_window = VWindow::new(VWindowConfig::default());
 
-    let v_instance =
-        VInstance::new(&v_window, VInstanceConfig::default()).expect("failed to create VInstance");
+    let v_instance = VInstance::new(&v_window, VInstanceConfig::default());
 
     let v_surface = VSurface::new(&v_window, &v_instance);
 
@@ -21,7 +22,7 @@ fn main() {
     );
     let v_physical_device = v_physical_devices.remove(0);
 
-    let v_device = VDevice::new(&v_instance, &v_physical_device);
+    let v_device = VDevice::new(&v_instance, &v_surface, &v_physical_device);
 
     let v_swapchain = VSwapchain::new(
         &v_window,
@@ -30,4 +31,29 @@ fn main() {
         &v_physical_device,
         &v_device,
     );
+
+    let v_renderer = VRenderer::new(&v_device, &v_swapchain);
+
+    let vertices: Vec<Vertex> = vec![
+        Vertex {
+            pos: [-0.5, -0.5],
+            color: [1.0, 0.0, 0.0],
+        },
+        Vertex {
+            pos: [0.5, 0.5],
+            color: [1.0, 0.0, 0.0],
+        },
+        Vertex {
+            pos: [-0.5, 0.5],
+            color: [1.0, 0.0, 0.0],
+        },
+    ];
+
+    let basic_rendering_system = BasicRenderingSystem::<Vertex>::new(&v_device, &v_swapchain);
+
+    while !v_window.window.should_close() {
+        v_renderer.render(|command_buffer, image_index| {
+            basic_rendering_system.render(&v_device, command_buffer, image_index, &vertices);
+        });
+    }
 }

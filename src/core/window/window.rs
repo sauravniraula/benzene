@@ -1,6 +1,6 @@
 use ash::vk;
 use glfw::{self, WindowEvent, fail_on_errors};
-use std::{io::Result, ptr::null};
+use std::ptr::null;
 
 pub struct VWindow {
     pub glfwi: glfw::Glfw,
@@ -9,7 +9,7 @@ pub struct VWindow {
 }
 
 impl VWindow {
-    pub fn new(config: super::VWindowConfig) -> Result<Self> {
+    pub fn new(config: super::VWindowConfig) -> Self {
         let mut glfwi = glfw::init(fail_on_errors!()).expect("failed to initialize glfw");
 
         glfwi.window_hint(glfw::WindowHint::ClientApi(glfw::ClientApiHint::NoApi));
@@ -24,11 +24,11 @@ impl VWindow {
             )
             .expect("failed to create window");
 
-        Ok(Self {
+        Self {
             glfwi,
             window,
             receiver,
-        })
+        }
     }
 
     pub fn get_surface(
