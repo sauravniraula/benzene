@@ -42,6 +42,13 @@ impl VBuffer {
             },
         );
 
+        unsafe {
+            v_device
+                .device
+                .bind_buffer_memory(buffer, memory, 0)
+                .expect("failed to bind buffer memory")
+        };
+
         Self {
             buffer,
             memory_requirements,
@@ -49,7 +56,7 @@ impl VBuffer {
         }
     }
 
-    pub fn copy_to_buffer<T>(&self, v_device: &VDevice, data: T) {
+    pub fn copy_to_buffer<T>(&self, v_device: &VDevice, data: &T) {
         VMemoryManager::copy_to_host_visible(v_device, self, data);
     }
 }

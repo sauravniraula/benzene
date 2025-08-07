@@ -7,6 +7,7 @@ pub struct VPipelineInfo {
     pub vert_shader_module: vk::ShaderModule,
     pub frag_shader_module: vk::ShaderModule,
     pub layout: vk::PipelineLayout,
+    pub color_blend_attachments: Vec<vk::PipelineColorBlendAttachmentState>,
 }
 
 impl VPipelineInfo {
@@ -45,11 +46,18 @@ impl VPipelineInfo {
                 .expect("failed to create pipeline layout")
         };
 
+        let color_blend_attachments = vec![
+            vk::PipelineColorBlendAttachmentState::default()
+                .blend_enable(false)
+                .color_write_mask(vk::ColorComponentFlags::RGBA),
+        ];
+
         Self {
             config,
             vert_shader_module,
             frag_shader_module,
             layout,
+            color_blend_attachments,
         }
     }
 
@@ -77,6 +85,12 @@ impl VPipelineInfo {
 
     pub fn get_rasterization_stage(&self) -> vk::PipelineRasterizationStateCreateInfo {
         vk::PipelineRasterizationStateCreateInfo::default().line_width(1.0)
+    }
+
+    pub fn get_color_blend_stage(&self) -> vk::PipelineColorBlendStateCreateInfo {
+        vk::PipelineColorBlendStateCreateInfo::default()
+            .attachments(&self.color_blend_attachments)
+            .logic_op_enable(false)
     }
 
     pub fn get_dynamic_state(&self) -> vk::PipelineDynamicStateCreateInfo {

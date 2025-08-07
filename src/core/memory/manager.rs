@@ -27,7 +27,7 @@ impl VMemoryManager {
         }
     }
 
-    pub fn copy_to_host_visible<T>(v_device: &VDevice, v_buffer: &VBuffer, data: T) {
+    pub fn copy_to_host_visible<T>(v_device: &VDevice, v_buffer: &VBuffer, data: &T) {
         let destination = unsafe {
             v_device
                 .device
@@ -39,7 +39,7 @@ impl VMemoryManager {
                 )
                 .expect("failed to map memory") as *mut T
         };
-        let source: *const T = &data;
+        let source: *const T = data;
         unsafe {
             std::ptr::copy(source, destination, 1);
             v_device.device.unmap_memory(v_buffer.memory);

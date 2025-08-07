@@ -9,6 +9,7 @@ pub struct VRenderer<'a> {
     pub command_buffers: Vec<vk::CommandBuffer>,
     pub ready_to_submit_s: vk::Semaphore,
     pub ready_to_present_s: vk::Semaphore,
+    pub buffer_free_f: vk::Fence,
     v_device: &'a VDevice,
     v_swapchain: &'a VSwapchain,
 }
@@ -18,7 +19,12 @@ impl<'a> VRenderer<'a> {
         let command_pool = unsafe {
             v_device
                 .device
-                .create_command_pool(&vk::CommandPoolCreateInfo::default(), None)
+                .create_command_pool(
+                    &vk::CommandPoolCreateInfo::default()
+                        .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+                        .queue_family_index(v_device.graphics_queue_family_index),
+                    None,
+                )
                 .expect("failed to create command pool")
         };
 
@@ -46,11 +52,22 @@ impl<'a> VRenderer<'a> {
                 .expect("failed to create semaphore")
         };
 
+        let buffer_free_f = unsafe {
+            v_device
+                .device
+                .create_fence(
+                    &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
+                    None,
+                )
+                .expect("failed to create fence")
+        };
+
         Self {
             command_pool,
             command_buffers,
             ready_to_submit_s,
             ready_to_present_s,
+            buffer_free_f,
             v_device,
             v_swapchain,
         }
@@ -63,6 +80,18 @@ impl<'a> VRenderer<'a> {
     }
 
     pub fn start_draw(&self) -> (vk::CommandBuffer, usize) {
+        unsafe {
+            self.v_device
+                .device
+                .wait_for_fences(&[self.buffer_free_f], true, u64::MAX)
+                .expect("failed to wait for fence");
+
+            self.v_device
+                .device
+                .reset_fences(&[self.buffer_free_f])
+                .expect("failed to reset fence");
+        }
+
         let (image_index, _) = unsafe {
             self.v_swapchain
                 .swapchain_device
@@ -104,7 +133,7 @@ impl<'a> VRenderer<'a> {
                         .command_buffers(&[command_buffer])
                         .wait_semaphores(&[self.ready_to_submit_s])
                         .signal_semaphores(&[self.ready_to_present_s])],
-                    vk::Fence::null(),
+                    self.buffer_free_f,
                 )
                 .expect("failed to submit command buffer");
 

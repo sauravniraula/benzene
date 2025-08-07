@@ -6,7 +6,7 @@ use crate::core::{
     pipeline::{VPipelineInfo, VPipelineInfoConfig},
     rendering::{VRenderingSystem, VRenderingSystemConfig},
     swapchain::VSwapchain,
-    vertex_input::{Vertex, bindable::BindableVertexInput},
+    vertex_input::bindable::BindableVertexInput,
 };
 
 pub struct BasicRenderingSystem<T: BindableVertexInput> {
@@ -42,10 +42,21 @@ where
         v_device: &VDevice,
         command_buffer: vk::CommandBuffer,
         image_index: usize,
-        data: &Vec<T>,
+        vertex_count: u32,
+        buffers: &Vec<vk::Buffer>,
     ) {
         self.v_rendering_system
             .start(v_device, command_buffer, image_index);
+
+        unsafe {
+            v_device
+                .device
+                .cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &[0]);
+
+            v_device
+                .device
+                .cmd_draw(command_buffer, vertex_count, 1, 0, 0);
+        }
 
         self.v_rendering_system.end(v_device, command_buffer);
     }

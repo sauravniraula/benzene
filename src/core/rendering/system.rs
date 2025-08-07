@@ -14,9 +14,23 @@ impl VRenderingSystem {
         v_swapchain: &VSwapchain,
         config: VRenderingSystemConfig,
     ) -> Self {
-        let subpasses = [vk::SubpassDescription::default()];
+        let attachment_ref_1 = vk::AttachmentReference::default()
+            .attachment(0)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+        let attachment_refs = [attachment_ref_1];
+        let subpass_1 = vk::SubpassDescription::default().color_attachments(&attachment_refs);
+        let subpasses = [subpass_1];
 
-        let render_pass_info = vk::RenderPassCreateInfo::default().subpasses(&subpasses);
+        let attachment_1 = vk::AttachmentDescription::default()
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .format(v_swapchain.format)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
+
+        let attachments = [attachment_1];
+        let render_pass_info = vk::RenderPassCreateInfo::default()
+            .subpasses(&subpasses)
+            .attachments(&attachments);
 
         let render_pass = unsafe {
             v_device
@@ -37,7 +51,8 @@ impl VRenderingSystem {
         let mut vertex_input_states = Vec::new();
         let mut input_assembly_states = Vec::new();
         let mut shader_stages = Vec::new();
-        let mut rasterization_states = Vec::new();
+        let mut rasterization_stages = Vec::new();
+        let mut color_blend_stages = Vec::new();
         let mut dynamic_states = Vec::new();
         let mut viewport_states = Vec::new();
 
@@ -50,7 +65,8 @@ impl VRenderingSystem {
             vertex_input_states.push(vertex_input_state);
             input_assembly_states.push(info.get_input_assembly_stage());
             shader_stages.push(info.get_shader_stages());
-            rasterization_states.push(info.get_rasterization_stage());
+            rasterization_stages.push(info.get_rasterization_stage());
+            color_blend_stages.push(info.get_color_blend_stage());
             dynamic_states.push(info.get_dynamic_state());
             viewport_states.push(info.get_viewport_state());
         }
@@ -61,7 +77,8 @@ impl VRenderingSystem {
                 .vertex_input_state(&vertex_input_states[i])
                 .input_assembly_state(&input_assembly_states[i])
                 .stages(&shader_stages[i])
-                .rasterization_state(&rasterization_states[i])
+                .rasterization_state(&rasterization_stages[i])
+                .color_blend_state(&color_blend_stages[i])
                 .dynamic_state(&dynamic_states[i])
                 .viewport_state(&viewport_states[i])
                 .layout(config.pipeline_infos[i].layout);
@@ -123,6 +140,7 @@ impl VRenderingSystem {
             float32: [1.0, 1.0, 1.0, 1.0],
         };
         let begin_info = vk::RenderPassBeginInfo::default()
+            .render_pass(self.render_pass)
             .clear_values(&clear_values)
             .framebuffer(self.framebuffers[image_index])
             .render_area(self.render_area);
