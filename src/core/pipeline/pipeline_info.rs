@@ -103,4 +103,13 @@ impl VPipelineInfo {
             .viewport_count(1)
             .scissor_count(1)
     }
+
+    pub fn destroy(&self, v_device: &VDevice) {
+        unsafe {
+            [self.vert_shader_module, self.frag_shader_module].map(|each| {
+                v_device.device.destroy_shader_module(each, None);
+            });
+            v_device.device.destroy_pipeline_layout(self.layout, None);
+        }
+    }
 }

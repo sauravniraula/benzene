@@ -4,18 +4,16 @@ use ash::vk;
 
 use crate::core::{device::VDevice, swapchain::VSwapchain};
 
-pub struct VRenderer<'a> {
+pub struct VRenderer {
     pub command_pool: vk::CommandPool,
     pub command_buffers: Vec<vk::CommandBuffer>,
     pub ready_to_submit_s: vk::Semaphore,
     pub ready_to_present_s: vk::Semaphore,
     pub buffer_free_f: vk::Fence,
-    v_device: &'a VDevice,
-    v_swapchain: &'a VSwapchain,
 }
 
-impl<'a> VRenderer<'a> {
-    pub fn new(v_device: &'a VDevice, v_swapchain: &'a VSwapchain) -> Self {
+impl VRenderer {
+    pub fn new(v_device: &VDevice, v_swapchain: &VSwapchain) -> Self {
         let command_pool = unsafe {
             v_device
                 .device
@@ -68,35 +66,42 @@ impl<'a> VRenderer<'a> {
             ready_to_submit_s,
             ready_to_present_s,
             buffer_free_f,
-            v_device,
-            v_swapchain,
         }
     }
 
-    pub fn render(&self, render: impl Fn(vk::CommandBuffer, usize) -> ()) {
-        let (command_buffer, image_index) = self.start_draw();
+    pub fn render(
+        &self,
+        v_device: &VDevice,
+        v_swapchain: &VSwapchain,
+        render: impl Fn(vk::CommandBuffer, usize) -> (),
+    ) {
+        let (command_buffer, image_index) = self.start_draw(v_device, v_swapchain);
         render(command_buffer, image_index);
-        self.end_draw(command_buffer, image_index);
+        self.end_draw(v_device, v_swapchain, command_buffer, image_index);
     }
 
-    pub fn start_draw(&self) -> (vk::CommandBuffer, usize) {
+    pub fn start_draw(
+        &self,
+        v_device: &VDevice,
+        v_swapchain: &VSwapchain,
+    ) -> (vk::CommandBuffer, usize) {
         unsafe {
-            self.v_device
+            v_device
                 .device
                 .wait_for_fences(&[self.buffer_free_f], true, u64::MAX)
                 .expect("failed to wait for fence");
 
-            self.v_device
+            v_device
                 .device
                 .reset_fences(&[self.buffer_free_f])
                 .expect("failed to reset fence");
         }
 
         let (image_index, _) = unsafe {
-            self.v_swapchain
+            v_swapchain
                 .swapchain_device
                 .acquire_next_image(
-                    self.v_swapchain.swapchain,
+                    v_swapchain.swapchain,
                     u64::MAX,
                     self.ready_to_submit_s,
                     vk::Fence::null(),
@@ -104,7 +109,7 @@ impl<'a> VRenderer<'a> {
                 .expect("failed to acquire next image")
         };
         unsafe {
-            self.v_device
+            v_device
                 .device
                 .begin_command_buffer(
                     self.command_buffers[image_index as usize],
@@ -118,17 +123,23 @@ impl<'a> VRenderer<'a> {
         )
     }
 
-    pub fn end_draw(&self, command_buffer: vk::CommandBuffer, image_index: usize) {
+    pub fn end_draw(
+        &self,
+        v_device: &VDevice,
+        v_swapchain: &VSwapchain,
+        command_buffer: vk::CommandBuffer,
+        image_index: usize,
+    ) {
         unsafe {
-            self.v_device
+            v_device
                 .device
                 .end_command_buffer(command_buffer)
                 .expect("failed to end command buffer");
 
-            self.v_device
+            v_device
                 .device
                 .queue_submit(
-                    self.v_device.graphics_queue,
+                    v_device.graphics_queue,
                     &[vk::SubmitInfo::default()
                         .command_buffers(&[command_buffer])
                         .wait_semaphores(&[self.ready_to_submit_s])
@@ -137,16 +148,32 @@ impl<'a> VRenderer<'a> {
                 )
                 .expect("failed to submit command buffer");
 
-            self.v_swapchain
+            v_swapchain
                 .swapchain_device
                 .queue_present(
-                    self.v_device.present_queue,
+                    v_device.present_queue,
                     &vk::PresentInfoKHR::default()
-                        .swapchains(&[self.v_swapchain.swapchain])
+                        .swapchains(&[v_swapchain.swapchain])
                         .image_indices(&[image_index as u32])
                         .wait_semaphores(&[self.ready_to_present_s]),
                 )
                 .expect("failed to present image");
         };
+    }
+
+    pub fn destroy(&self, v_device: &VDevice) {
+        unsafe {
+            v_device
+                .device
+                .free_command_buffers(self.command_pool, &self.command_buffers);
+            v_device
+                .device
+                .destroy_command_pool(self.command_pool, None);
+
+            v_device.device.destroy_fence(self.buffer_free_f, None);
+            [self.ready_to_submit_s, self.ready_to_present_s].map(|each| {
+                v_device.device.destroy_semaphore(each, None);
+            });
+        }
     }
 }

@@ -8,10 +8,14 @@ use ash::vk;
 pub struct VDevice {
     pub device: Device,
     pub graphics_queue_family_index: u32,
+    pub transfer_queue_family_index: u32,
     pub present_queue_family_index: u32,
     pub unique_queue_family_indices: Vec<u32>,
     pub graphics_queue: vk::Queue,
+    pub transfer_queue: vk::Queue,
     pub present_queue: vk::Queue,
+    pub is_graphics_and_transfer_queue_same: bool,
+    pub is_graphics_and_present_queue_same: bool,
 }
 
 impl VDevice {
@@ -20,14 +24,28 @@ impl VDevice {
         v_surface: &VSurface,
         v_physical_device: &VPhysicalDevice,
     ) -> Self {
-        let graphics_queue_family_index =
-            v_physical_device.get_queue_family(vk::QueueFlags::GRAPHICS);
+        let graphics_queue_family_index = v_physical_device
+            .get_queue_family_index(vk::QueueFlags::GRAPHICS)
+            .expect("Selected device does not support graphics queue");
+
+        let transfer_queue_family_index = v_physical_device
+            .get_transfer_queue_family_index()
+            .unwrap_or(graphics_queue_family_index);
+
         let present_queue_family_index = v_physical_device
             .get_present_queue_family_index(v_surface)
             .expect("failed to find present queue");
 
+        let is_graphics_and_transfer_queue_same =
+            graphics_queue_family_index == transfer_queue_family_index;
+        let is_graphics_and_present_queue_same =
+            graphics_queue_family_index == present_queue_family_index;
+
         let mut unique_queue_family_indices = vec![graphics_queue_family_index];
-        if graphics_queue_family_index != present_queue_family_index {
+        if !is_graphics_and_transfer_queue_same {
+            unique_queue_family_indices.push(transfer_queue_family_index);
+        }
+        if !is_graphics_and_present_queue_same {
             unique_queue_family_indices.push(present_queue_family_index);
         }
         let queue_infos: Vec<vk::DeviceQueueCreateInfo> = unique_queue_family_indices
@@ -56,15 +74,26 @@ impl VDevice {
         };
 
         let graphics_queue = unsafe { device.get_device_queue(graphics_queue_family_index, 0) };
+        let transfer_queue = unsafe { device.get_device_queue(transfer_queue_family_index, 0) };
         let present_queue = unsafe { device.get_device_queue(present_queue_family_index, 0) };
 
         Self {
             device,
             graphics_queue_family_index,
+            transfer_queue_family_index,
             present_queue_family_index,
             unique_queue_family_indices,
             graphics_queue,
+            transfer_queue,
             present_queue,
+            is_graphics_and_transfer_queue_same,
+            is_graphics_and_present_queue_same,
+        }
+    }
+
+    pub fn destroy(&self) {
+        unsafe {
+            self.device.destroy_device(None);
         }
     }
 }

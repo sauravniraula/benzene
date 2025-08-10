@@ -1,4 +1,7 @@
-use crate::core::{device::VDevice, rendering::VRenderingSystemConfig, swapchain::VSwapchain};
+use crate::core::{
+    device::VDevice, pipeline::VPipelineInfo, rendering::VRenderingSystemConfig,
+    swapchain::VSwapchain,
+};
 use ash::vk::{self, Extent2D, Offset2D, Rect2D};
 
 pub struct VRenderingSystem {
@@ -98,6 +101,8 @@ impl VRenderingSystem {
             )
         };
 
+        VRenderingSystem::destroy_pipeline_infos(v_device, config.pipeline_infos);
+
         Self {
             render_pass,
             pipelines,
@@ -179,6 +184,24 @@ impl VRenderingSystem {
     pub fn end(&self, v_device: &VDevice, command_buffer: vk::CommandBuffer) {
         unsafe {
             v_device.device.cmd_end_render_pass(command_buffer);
+        }
+    }
+
+    pub fn destroy_pipeline_infos(v_device: &VDevice, infos: Vec<VPipelineInfo>) {
+        for info in infos.iter() {
+            info.destroy(v_device);
+        }
+    }
+
+    pub fn destroy(&self, v_device: &VDevice) {
+        unsafe {
+            for &framebuffer in self.framebuffers.iter() {
+                v_device.device.destroy_framebuffer(framebuffer, None);
+            }
+            for &pipeline in self.pipelines.iter() {
+                v_device.device.destroy_pipeline(pipeline, None);
+            }
+            v_device.device.destroy_render_pass(self.render_pass, None);
         }
     }
 }

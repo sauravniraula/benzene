@@ -99,10 +99,10 @@ impl VInstance {
         (debug_instance, debug_messenger)
     }
 
-    pub fn cleanup(self) {
+    pub fn destroy(&self) {
         unsafe {
             if let (Some(debug_instance), Some(debug_messenger)) =
-                (self.debug_instance, self.debug_messenger)
+                (&self.debug_instance, self.debug_messenger)
             {
                 debug_instance.destroy_debug_utils_messenger(debug_messenger, None);
             }

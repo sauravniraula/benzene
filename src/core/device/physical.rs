@@ -14,15 +14,28 @@ pub struct VPhysicalDevice {
 }
 
 impl VPhysicalDevice {
-    pub fn get_queue_family(&self, flag: vk::QueueFlags) -> u32 {
-        let mut queue_index: u32 = 0;
+    pub fn get_queue_family_index(&self, flag: vk::QueueFlags) -> Option<u32> {
         for i in 0..self.queue_families.len() {
             if self.queue_families[i].queue_flags.contains(flag) {
-                queue_index = i as u32;
-                break;
+                return Some(i as u32);
             }
         }
-        queue_index
+        None
+    }
+
+    pub fn get_transfer_queue_family_index(&self) -> Option<u32> {
+        for i in 0..self.queue_families.len() {
+            if self.queue_families[i]
+                .queue_flags
+                .contains(vk::QueueFlags::TRANSFER)
+                && !self.queue_families[i]
+                    .queue_flags
+                    .contains(vk::QueueFlags::GRAPHICS)
+            {
+                return Some(i as u32);
+            }
+        }
+        None
     }
 
     pub fn get_present_queue_family_index(&self, v_surface: &VSurface) -> Option<u32> {

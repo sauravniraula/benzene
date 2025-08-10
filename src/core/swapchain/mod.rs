@@ -36,10 +36,14 @@ impl VSwapchain {
             .image_format(surface_format.format)
             .image_color_space(surface_format.color_space);
 
-        if v_device.unique_queue_family_indices.len() > 1 {
+        let graphics_and_present_queue_family_indices = [
+            v_device.graphics_queue_family_index,
+            v_device.present_queue_family_index,
+        ];
+        if !v_device.is_graphics_and_present_queue_same {
             create_info = create_info
                 .image_sharing_mode(vk::SharingMode::CONCURRENT)
-                .queue_family_indices(&v_device.unique_queue_family_indices);
+                .queue_family_indices(&graphics_and_present_queue_family_indices);
         }
 
         let swapchain = unsafe {
@@ -115,6 +119,16 @@ impl VSwapchain {
         vk::Extent2D {
             width: width,
             height: height,
+        }
+    }
+
+    pub fn destroy(&self, v_device: &super::device::VDevice) {
+        unsafe {
+            for &image_view in self.image_views.iter() {
+                v_device.device.destroy_image_view(image_view, None);
+            }
+            self.swapchain_device
+                .destroy_swapchain(self.swapchain, None);
         }
     }
 }

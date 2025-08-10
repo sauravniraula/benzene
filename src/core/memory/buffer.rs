@@ -1,49 +1,62 @@
 use ash::vk;
 
 use crate::core::{
-    device::{VDevice, VPhysicalDevice},
-    memory::{VAllocateMemoryConfig, VBufferConfig, VMemoryManager},
+    backend::VBackend,
+    memory::{VAllocateMemoryConfig, VBufferConfig},
 };
 
 pub struct VBuffer {
     pub buffer: vk::Buffer,
     pub memory_requirements: vk::MemoryRequirements,
     pub memory: vk::DeviceMemory,
+    pub config: VBufferConfig,
 }
 
 impl VBuffer {
-    pub fn new(
-        v_physical_device: &VPhysicalDevice,
-        v_device: &VDevice,
-        config: VBufferConfig,
-    ) -> Self {
-        let buffer_info = vk::BufferCreateInfo::default()
+    pub fn new(v_backend: &VBackend, config: VBufferConfig) -> Self {
+        assert!(
+            config.sharing_mode != vk::SharingMode::CONCURRENT || config.queue_families.is_some(),
+            "Queue families must be provided on CONCURRENT Sharing Mode"
+        );
+        let mut buffer_info = vk::BufferCreateInfo::default()
             .size(config.size)
-            .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
-            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+            .usage(config.usage)
+            .sharing_mode(config.sharing_mode);
+
+        let queue_families: Vec<u32>;
+        if config.sharing_mode == vk::SharingMode::CONCURRENT {
+            queue_families = config.queue_families.clone().unwrap();
+            buffer_info = buffer_info.queue_family_indices(&queue_families);
+        }
 
         let buffer = unsafe {
-            v_device
+            v_backend
+                .v_device
                 .device
                 .create_buffer(&buffer_info, None)
                 .expect("failed to create buffer")
         };
 
-        let memory_requirements = unsafe { v_device.device.get_buffer_memory_requirements(buffer) };
+        let memory_requirements = unsafe {
+            v_backend
+                .v_device
+                .device
+                .get_buffer_memory_requirements(buffer)
+        };
 
-        let memory = VMemoryManager::allocate_memory(
-            v_physical_device,
-            v_device,
+        let memory = v_backend.v_memory_manager.allocate_memory(
+            &v_backend.v_physical_device,
+            &v_backend.v_device,
             VAllocateMemoryConfig {
                 size: memory_requirements.size,
                 memory_type: memory_requirements.memory_type_bits,
-                properties: vk::MemoryPropertyFlags::HOST_VISIBLE
-                    | vk::MemoryPropertyFlags::HOST_COHERENT,
+                properties: config.memory_property,
             },
         );
 
         unsafe {
-            v_device
+            v_backend
+                .v_device
                 .device
                 .bind_buffer_memory(buffer, memory, 0)
                 .expect("failed to bind buffer memory")
@@ -53,10 +66,50 @@ impl VBuffer {
             buffer,
             memory_requirements,
             memory,
+            config,
         }
     }
 
-    pub fn copy_to_buffer<T>(&self, v_device: &VDevice, data: &T) {
-        VMemoryManager::copy_to_host_visible(v_device, self, data);
+    pub fn is_host_visible(&self) -> bool {
+        self.config
+            .memory_property
+            .contains(vk::MemoryPropertyFlags::HOST_VISIBLE)
+    }
+
+    pub fn copy_to_buffer(&self, v_backend: &VBackend, data: *const u8, size: usize) {
+        if self.is_host_visible() {
+            v_backend
+                .v_memory_manager
+                .copy_to_host_visible(&v_backend.v_device, self, data, size);
+            return;
+        }
+        let staging_buffer = VBuffer::new(
+            v_backend,
+            VBufferConfig {
+                size: self.memory_requirements.size,
+                usage: vk::BufferUsageFlags::TRANSFER_SRC,
+                sharing_mode: vk::SharingMode::EXCLUSIVE,
+                queue_families: None,
+                memory_property: vk::MemoryPropertyFlags::HOST_VISIBLE
+                    | vk::MemoryPropertyFlags::HOST_COHERENT,
+            },
+        );
+        staging_buffer.copy_to_buffer(v_backend, data, size);
+        v_backend.v_memory_manager.copy_to_device_local(
+            &v_backend.v_device,
+            &staging_buffer,
+            self,
+            size,
+        );
+        staging_buffer.destroy(v_backend);
+    }
+
+    pub fn destroy(&self, v_backend: &VBackend) {
+        unsafe {
+            v_backend
+                .v_memory_manager
+                .free_memory(&v_backend.v_device, self.memory);
+            v_backend.v_device.device.destroy_buffer(self.buffer, None);
+        }
     }
 }

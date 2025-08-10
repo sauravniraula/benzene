@@ -43,7 +43,7 @@ where
         command_buffer: vk::CommandBuffer,
         image_index: usize,
         vertex_count: u32,
-        buffers: &Vec<vk::Buffer>,
+        buffers: &[vk::Buffer],
     ) {
         self.v_rendering_system
             .start(v_device, command_buffer, image_index);
@@ -59,5 +59,9 @@ where
         }
 
         self.v_rendering_system.end(v_device, command_buffer);
+    }
+
+    pub fn destroy(&self, v_device: &VDevice) {
+        self.v_rendering_system.destroy(v_device);
     }
 }

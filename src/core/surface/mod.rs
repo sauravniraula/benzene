@@ -22,4 +22,10 @@ impl VSurface {
             surface_instance,
         }
     }
+
+    pub fn destroy(&self) {
+        unsafe {
+            self.surface_instance.destroy_surface(self.surface, None);
+        }
+    }
 }
