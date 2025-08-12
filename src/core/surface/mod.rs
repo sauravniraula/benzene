@@ -1,6 +1,7 @@
 use ash::khr;
 use ash::vk;
 
+use crate::core::device::VPhysicalDevice;
 use crate::core::instance::VInstance;
 use crate::core::window::VWindow;
 
@@ -20,6 +21,20 @@ impl VSurface {
         Self {
             surface,
             surface_instance,
+        }
+    }
+
+    pub fn get_surface_capabilities(
+        &self,
+        v_physical_device: &VPhysicalDevice,
+    ) -> vk::SurfaceCapabilitiesKHR {
+        unsafe {
+            self.surface_instance
+                .get_physical_device_surface_capabilities(
+                    v_physical_device.physical_device,
+                    self.surface,
+                )
+                .expect("failed to get surface capabilities")
         }
     }
 

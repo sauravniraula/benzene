@@ -13,7 +13,7 @@ impl VWindow {
         let mut glfwi = glfw::init(fail_on_errors!()).expect("failed to initialize glfw");
 
         glfwi.window_hint(glfw::WindowHint::ClientApi(glfw::ClientApiHint::NoApi));
-        glfwi.window_hint(glfw::WindowHint::Resizable(false));
+        glfwi.window_hint(glfw::WindowHint::Resizable(true));
 
         let (window, receiver) = glfwi
             .create_window(

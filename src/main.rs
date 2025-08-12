@@ -9,7 +9,7 @@ use vulkan_engine::{
 
 fn main() {
     let mut v_window = VWindow::new(VWindowConfig::default());
-    let v_backend = VBackend::new(&v_window);
+    let mut v_backend = VBackend::new(&v_window);
 
     // Apps
     let an_app = VApp::new(&v_backend);
@@ -30,15 +30,10 @@ fn main() {
             }
         }
 
-        v_backend.v_renderer.render(
-            &v_backend.v_device,
-            &v_backend.v_swapchain,
-            |command_buffer, image_index| {
-                an_app.render(command_buffer, image_index);
-            },
-        );
+        v_backend.render(&v_window, vec![&an_app]);
     }
 
-    an_app.destroy();
+    v_backend.v_device.wait_till_idle();
+    an_app.destroy(&v_backend);
     v_backend.destroy();
 }

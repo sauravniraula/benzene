@@ -1,5 +1,5 @@
 pub mod bindable;
-pub mod vertex;
+pub mod vertex2d;
 
 pub use bindable::BindableVertexInput;
-pub use vertex::Vertex;
+pub use vertex2d::Vertex2D;

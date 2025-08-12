@@ -2,7 +2,7 @@ use ash::vk;
 
 use crate::core::{
     backend::VBackend,
-    memory::{VAllocateMemoryConfig, VBufferConfig},
+    memory::{VAllocateMemoryConfig, VBufferConfig, VBufferState},
 };
 
 pub struct VBuffer {
@@ -10,6 +10,7 @@ pub struct VBuffer {
     pub memory_requirements: vk::MemoryRequirements,
     pub memory: vk::DeviceMemory,
     pub config: VBufferConfig,
+    pub state: VBufferState,
 }
 
 impl VBuffer {
@@ -67,6 +68,28 @@ impl VBuffer {
             memory_requirements,
             memory,
             config,
+            state: VBufferState::UNMAPPED,
+        }
+    }
+
+    pub fn map_memory(&mut self, v_backend: &VBackend) -> VBufferState {
+        let mapped_at = v_backend
+            .v_memory_manager
+            .map_memory(&v_backend.v_device, self);
+        self.state = VBufferState::MAPPED(mapped_at);
+        return VBufferState::MAPPED(mapped_at);
+    }
+
+    pub fn unmap_memory(&mut self, v_backend: &VBackend) -> VBufferState {
+        match self.state {
+            VBufferState::UNMAPPED => VBufferState::UNMAPPED,
+            VBufferState::MAPPED(_) => {
+                v_backend
+                    .v_memory_manager
+                    .unmap_memory(&v_backend.v_device, self);
+                self.state = VBufferState::UNMAPPED;
+                VBufferState::UNMAPPED
+            }
         }
     }
 
@@ -76,7 +99,7 @@ impl VBuffer {
             .contains(vk::MemoryPropertyFlags::HOST_VISIBLE)
     }
 
-    pub fn copy_to_buffer(&self, v_backend: &VBackend, data: *const u8, size: usize) {
+    pub fn copy_to_buffer(&self, v_backend: &VBackend, data: *const u8, size: u64) {
         if self.is_host_visible() {
             v_backend
                 .v_memory_manager

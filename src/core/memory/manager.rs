@@ -46,14 +46,8 @@ impl VMemoryManager {
         }
     }
 
-    pub fn copy_to_host_visible(
-        &self,
-        v_device: &VDevice,
-        v_buffer: &VBuffer,
-        data: *const u8,
-        size: usize,
-    ) {
-        let destination = unsafe {
+    pub fn map_memory(&self, v_device: &VDevice, v_buffer: &VBuffer) -> *mut u8 {
+        unsafe {
             v_device
                 .device
                 .map_memory(
@@ -63,9 +57,23 @@ impl VMemoryManager {
                     vk::MemoryMapFlags::empty(),
                 )
                 .expect("failed to map memory") as *mut u8
-        };
+        }
+    }
+
+    pub fn unmap_memory(&self, v_device: &VDevice, v_buffer: &VBuffer) {
+        unsafe { v_device.device.unmap_memory(v_buffer.memory) };
+    }
+
+    pub fn copy_to_host_visible(
+        &self,
+        v_device: &VDevice,
+        v_buffer: &VBuffer,
+        data: *const u8,
+        size: u64,
+    ) {
         unsafe {
-            std::ptr::copy_nonoverlapping(data, destination, size);
+            let destination = self.map_memory(v_device, v_buffer);
+            std::ptr::copy_nonoverlapping(data, destination, size as usize);
             v_device.device.unmap_memory(v_buffer.memory);
         };
     }
@@ -75,7 +83,7 @@ impl VMemoryManager {
         v_device: &VDevice,
         from: &VBuffer,
         to: &VBuffer,
-        size: usize,
+        size: u64,
     ) {
         let alloc_info = vk::CommandBufferAllocateInfo::default()
             .command_pool(self.command_pool)
@@ -95,7 +103,7 @@ impl VMemoryManager {
                 )
                 .expect("failed to begin command buffer on VMemoryManager");
 
-            let copy_regions = [vk::BufferCopy::default().size(size as u64)];
+            let copy_regions = [vk::BufferCopy::default().size(size)];
             v_device.device.cmd_copy_buffer(
                 command_buffers[0],
                 from.buffer,

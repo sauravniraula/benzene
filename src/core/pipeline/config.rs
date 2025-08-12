@@ -1,13 +1,11 @@
-pub struct VPipelineInfoConfig {
+use ash::vk;
+
+use crate::core::descriptor::VDescriptorLayout;
+
+pub struct VPipelineInfoConfig<'a> {
+    pub binding_descriptions: Vec<vk::VertexInputBindingDescription>,
+    pub attribute_descriptions: Vec<vk::VertexInputAttributeDescription>,
     pub vertex_shader_file: String,
     pub fragment_shader_file: String,
-}
-
-impl VPipelineInfoConfig {
-    pub fn default() -> Self {
-        Self {
-            vertex_shader_file: "src/shaders/shader.vert".into(),
-            fragment_shader_file: "src/shaders/shader.frag".into(),
-        }
-    }
+    pub descriptor_layouts: &'a Vec<VDescriptorLayout>,
 }

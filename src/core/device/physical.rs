@@ -7,7 +7,6 @@ pub struct VPhysicalDevice {
     pub surface_formats: Vec<vk::SurfaceFormatKHR>,
     pub present_modes: Vec<vk::PresentModeKHR>,
     pub queue_families: Vec<vk::QueueFamilyProperties>,
-    pub surface_capabilities: vk::SurfaceCapabilitiesKHR,
     pub memory_properties: vk::PhysicalDeviceMemoryProperties,
     pub score: usize,
     pub required_extensions: Vec<String>,
@@ -75,14 +74,6 @@ impl VPhysicalDevice {
             }
         }
         return vk::PresentModeKHR::FIFO;
-    }
-
-    pub fn select_swapchain_image_count(&self) -> u32 {
-        let mut image_count = self.surface_capabilities.min_image_count;
-        if self.surface_capabilities.max_image_count > image_count {
-            image_count += 1;
-        }
-        image_count
     }
 
     pub fn find_memory_type_index(
@@ -175,13 +166,6 @@ impl VPhysicalDevice {
                 break;
             }
 
-            let surface_capabilities = unsafe {
-                v_surface
-                    .surface_instance
-                    .get_physical_device_surface_capabilities(each_device, v_surface.surface)
-                    .expect("failed to get device surface capabilities")
-            };
-
             let memory_properties = unsafe {
                 v_instance
                     .instance
@@ -194,7 +178,6 @@ impl VPhysicalDevice {
                 surface_formats,
                 present_modes,
                 queue_families,
-                surface_capabilities,
                 memory_properties,
                 score,
                 required_extensions: config.required_extensions.clone(),

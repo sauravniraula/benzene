@@ -1,12 +1,16 @@
-use crate::core::{
-    device::{VDevice, VPhysicalDevice, config::VPhysicalDeviceConfig},
-    instance::{VInstance, VInstanceConfig},
-    memory::VMemoryManager,
-    rendering::{BasicRenderingSystem, VRenderer},
-    surface::VSurface,
-    swapchain::VSwapchain,
-    vertex_input::Vertex,
-    window::VWindow,
+use crate::{
+    app::renderable_app::RenderableApp,
+    constants::MAX_FRAMES_IN_FLIGHT,
+    core::{
+        backend_event::VBackendEvent,
+        device::{VDevice, VPhysicalDevice, config::VPhysicalDeviceConfig},
+        instance::{VInstance, VInstanceConfig},
+        memory::VMemoryManager,
+        rendering::{BasicRenderingSystem, VRenderResult, VRenderer},
+        surface::VSurface,
+        swapchain::VSwapchain,
+        window::VWindow,
+    },
 };
 
 pub struct VBackend {
@@ -17,7 +21,7 @@ pub struct VBackend {
     pub v_memory_manager: VMemoryManager,
     pub v_swapchain: VSwapchain,
     pub v_renderer: VRenderer,
-    pub basic_rendering_system: BasicRenderingSystem<Vertex>,
+    pub basic_rendering_system: BasicRenderingSystem,
 }
 
 impl VBackend {
@@ -39,8 +43,8 @@ impl VBackend {
             &v_physical_device,
             &v_device,
         );
-        let v_renderer = VRenderer::new(&v_device, &v_swapchain);
-        let basic_rendering_system = BasicRenderingSystem::<Vertex>::new(&v_device, &v_swapchain);
+        let v_renderer = VRenderer::new(&v_device, MAX_FRAMES_IN_FLIGHT);
+        let basic_rendering_system = BasicRenderingSystem::new(&v_device, &v_swapchain);
 
         Self {
             v_instance,
@@ -51,6 +55,42 @@ impl VBackend {
             v_swapchain,
             v_renderer,
             basic_rendering_system,
+        }
+    }
+
+    pub fn recreate_swapchain(&mut self, v_window: &VWindow) {
+        self.v_device.wait_till_idle();
+        self.v_swapchain.destroy(&self.v_device);
+        self.v_swapchain = VSwapchain::new(
+            v_window,
+            &self.v_instance,
+            &self.v_surface,
+            &self.v_physical_device,
+            &self.v_device,
+        );
+    }
+
+    pub fn emit_update_framebuffers_event(&mut self) {
+        let event = VBackendEvent::UpdateFramebuffers(&self.v_device, &self.v_swapchain);
+        self.basic_rendering_system.handle_backend_event(&event);
+    }
+
+    pub fn render(&mut self, v_window: &VWindow, apps: Vec<&impl RenderableApp>) {
+        let render_result = self.v_renderer.render(
+            &self.v_device,
+            &self.v_swapchain,
+            |command_buffer, image_index| {
+                for app in apps.iter() {
+                    app.render_app(self, command_buffer, image_index);
+                }
+            },
+        );
+        match render_result {
+            VRenderResult::RecreateSwapchain => {
+                self.recreate_swapchain(v_window);
+                self.emit_update_framebuffers_event();
+            }
+            _ => {}
         }
     }
 

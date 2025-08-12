@@ -2,16 +2,16 @@ use super::VPipelineInfoConfig;
 use crate::{core::device::VDevice, shared::load_file_as_vec_u32};
 use ash::vk;
 
-pub struct VPipelineInfo {
-    pub config: VPipelineInfoConfig,
+pub struct VPipelineInfo<'a> {
+    pub config: VPipelineInfoConfig<'a>,
     pub vert_shader_module: vk::ShaderModule,
     pub frag_shader_module: vk::ShaderModule,
     pub layout: vk::PipelineLayout,
     pub color_blend_attachments: Vec<vk::PipelineColorBlendAttachmentState>,
 }
 
-impl VPipelineInfo {
-    pub fn new(v_device: &VDevice, config: VPipelineInfoConfig) -> Self {
+impl<'a> VPipelineInfo<'a> {
+    pub fn new(v_device: &VDevice, config: VPipelineInfoConfig<'a>) -> Self {
         let mut vert_shader_byte_code_path = config.vertex_shader_file.clone();
         vert_shader_byte_code_path.push_str(".spv");
         let mut frag_shader_byte_code_path = config.fragment_shader_file.clone();
@@ -38,7 +38,14 @@ impl VPipelineInfo {
                 .expect("failed to create fragment shader module")
         };
 
-        let layout_info = vk::PipelineLayoutCreateInfo::default();
+        let descriptor_set_layouts: Vec<vk::DescriptorSetLayout> = config
+            .descriptor_layouts
+            .iter()
+            .map(|each| each.layout)
+            .collect();
+
+        let layout_info =
+            vk::PipelineLayoutCreateInfo::default().set_layouts(&descriptor_set_layouts);
         let layout = unsafe {
             v_device
                 .device
@@ -63,6 +70,8 @@ impl VPipelineInfo {
 
     pub fn get_vertex_input_stage(&self) -> vk::PipelineVertexInputStateCreateInfo {
         vk::PipelineVertexInputStateCreateInfo::default()
+            .vertex_binding_descriptions(&self.config.binding_descriptions)
+            .vertex_attribute_descriptions(&self.config.attribute_descriptions)
     }
 
     pub fn get_input_assembly_stage(&self) -> vk::PipelineInputAssemblyStateCreateInfo {

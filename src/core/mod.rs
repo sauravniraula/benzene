@@ -1,3 +1,5 @@
+pub mod backend;
+pub mod backend_event;
 pub mod device;
 pub mod game_objects;
 pub mod instance;
@@ -8,4 +10,4 @@ pub mod surface;
 pub mod swapchain;
 pub mod vertex_input;
 pub mod window;
-pub mod backend;
+pub mod descriptor;

@@ -1,18 +1,19 @@
 use crate::core::vertex_input::BindableVertexInput;
 use ash::vk;
 use memoffset::offset_of;
+use nalgebra::{Vector2, Vector3};
 
-pub struct Vertex {
-    pub pos: [f32; 2],
-    pub color: [f32; 3],
+pub struct Vertex2D {
+    pub pos: Vector2<f32>,
+    pub color: Vector3<f32>,
 }
 
-impl BindableVertexInput for Vertex {
+impl BindableVertexInput for Vertex2D {
     fn get_binding_descriptions() -> Vec<vk::VertexInputBindingDescription> {
         [vk::VertexInputBindingDescription::default()
             .binding(0)
             .input_rate(vk::VertexInputRate::VERTEX)
-            .stride(size_of::<Vertex>() as u32)]
+            .stride(size_of::<Vertex2D>() as u32)]
         .into()
     }
 
@@ -27,7 +28,7 @@ impl BindableVertexInput for Vertex {
                 .binding(0)
                 .location(1)
                 .format(vk::Format::R32G32B32_SFLOAT)
-                .offset(offset_of!(Vertex, color) as u32),
+                .offset(offset_of!(Vertex2D, color) as u32),
         ]
         .into()
     }

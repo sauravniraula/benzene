@@ -16,6 +16,10 @@ pub struct VDevice {
     pub present_queue: vk::Queue,
     pub is_graphics_and_transfer_queue_same: bool,
     pub is_graphics_and_present_queue_same: bool,
+
+    // For buffers
+    pub buffer_sharing_mode: vk::SharingMode,
+    pub buffer_queue_family_indices: Vec<u32>,
 }
 
 impl VDevice {
@@ -42,8 +46,10 @@ impl VDevice {
             graphics_queue_family_index == present_queue_family_index;
 
         let mut unique_queue_family_indices = vec![graphics_queue_family_index];
+        let mut buffer_queue_family_indices = vec![graphics_queue_family_index];
         if !is_graphics_and_transfer_queue_same {
             unique_queue_family_indices.push(transfer_queue_family_index);
+            buffer_queue_family_indices.push(transfer_queue_family_index);
         }
         if !is_graphics_and_present_queue_same {
             unique_queue_family_indices.push(present_queue_family_index);
@@ -77,6 +83,12 @@ impl VDevice {
         let transfer_queue = unsafe { device.get_device_queue(transfer_queue_family_index, 0) };
         let present_queue = unsafe { device.get_device_queue(present_queue_family_index, 0) };
 
+        let buffer_sharing_mode = if buffer_queue_family_indices.len() > 0 {
+            vk::SharingMode::CONCURRENT
+        } else {
+            vk::SharingMode::EXCLUSIVE
+        };
+
         Self {
             device,
             graphics_queue_family_index,
@@ -88,6 +100,16 @@ impl VDevice {
             present_queue,
             is_graphics_and_transfer_queue_same,
             is_graphics_and_present_queue_same,
+            buffer_queue_family_indices,
+            buffer_sharing_mode,
+        }
+    }
+
+    pub fn wait_till_idle(&self) {
+        unsafe {
+            self.device
+                .device_wait_idle()
+                .expect("failed to wait device till idle");
         }
     }
 

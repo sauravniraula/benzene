@@ -1,10 +1,11 @@
 use crate::core::{
-    device::VDevice, pipeline::VPipelineInfo, rendering::VRenderingSystemConfig,
-    swapchain::VSwapchain,
+    backend_event::VBackendEvent, device::VDevice, pipeline::VPipelineInfo,
+    rendering::VRenderingSystemConfig, swapchain::VSwapchain,
 };
 use ash::vk::{self, Extent2D, Offset2D, Rect2D};
 
 pub struct VRenderingSystem {
+    pub attachments_count: usize,
     pub render_pass: vk::RenderPass,
     pub pipelines: Vec<vk::Pipeline>,
     pub render_area: Rect2D,
@@ -31,6 +32,7 @@ impl VRenderingSystem {
             .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
 
         let attachments = [attachment_1];
+        let attachments_count = attachments.len();
         let render_pass_info = vk::RenderPassCreateInfo::default()
             .subpasses(&subpasses)
             .attachments(&attachments);
@@ -44,6 +46,7 @@ impl VRenderingSystem {
 
         let framebuffers = VRenderingSystem::create_framebuffers(
             v_device,
+            attachments_count as u32,
             render_pass,
             &v_swapchain.image_views,
             v_swapchain.image_extent,
@@ -60,12 +63,7 @@ impl VRenderingSystem {
         let mut viewport_states = Vec::new();
 
         for info in &config.pipeline_infos {
-            let vertex_input_state = info
-                .get_vertex_input_stage()
-                .vertex_binding_descriptions(&config.binding_descriptions)
-                .vertex_attribute_descriptions(&config.attribute_descriptions);
-
-            vertex_input_states.push(vertex_input_state);
+            vertex_input_states.push(info.get_vertex_input_stage());
             input_assembly_states.push(info.get_input_assembly_stage());
             shader_stages.push(info.get_shader_stages());
             rasterization_stages.push(info.get_rasterization_stage());
@@ -104,6 +102,7 @@ impl VRenderingSystem {
         VRenderingSystem::destroy_pipeline_infos(v_device, config.pipeline_infos);
 
         Self {
+            attachments_count,
             render_pass,
             pipelines,
             render_area: Rect2D {
@@ -116,6 +115,7 @@ impl VRenderingSystem {
 
     pub fn create_framebuffers(
         v_device: &VDevice,
+        attachments_count: u32,
         render_pass: vk::RenderPass,
         image_views: &Vec<vk::ImageView>,
         image_extent: Extent2D,
@@ -123,7 +123,7 @@ impl VRenderingSystem {
         (0..image_views.len())
             .map(|i| {
                 let info = vk::FramebufferCreateInfo::default()
-                    .attachment_count(1)
+                    .attachment_count(attachments_count)
                     .attachments(&image_views[i..i + 1])
                     .render_pass(render_pass)
                     .width(image_extent.width)
@@ -157,14 +157,6 @@ impl VRenderingSystem {
                 vk::SubpassContents::INLINE,
             );
 
-            for each_pipeline in self.pipelines.iter() {
-                v_device.device.cmd_bind_pipeline(
-                    command_buffer,
-                    vk::PipelineBindPoint::GRAPHICS,
-                    *each_pipeline,
-                );
-            }
-
             let viewport = vk::Viewport::default()
                 .height(self.render_area.extent.height as f32)
                 .width(self.render_area.extent.width as f32)
@@ -178,6 +170,14 @@ impl VRenderingSystem {
             v_device
                 .device
                 .cmd_set_scissor(command_buffer, 0, &[self.render_area]);
+
+            for each_pipeline in self.pipelines.iter() {
+                v_device.device.cmd_bind_pipeline(
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    *each_pipeline,
+                );
+            }
         };
     }
 
@@ -187,17 +187,45 @@ impl VRenderingSystem {
         }
     }
 
+    pub fn handle_backend_event(&mut self, event: &VBackendEvent) {
+        match event {
+            VBackendEvent::UpdateFramebuffers(v_device, v_swapchain) => {
+                self.destroy_framebuffers(v_device);
+
+                let new_image_extent = v_swapchain.image_extent;
+                self.framebuffers = VRenderingSystem::create_framebuffers(
+                    v_device,
+                    self.attachments_count as u32,
+                    self.render_pass,
+                    &v_swapchain.image_views,
+                    new_image_extent,
+                );
+                self.render_area = Rect2D {
+                    offset: self.render_area.offset,
+                    extent: new_image_extent,
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub fn destroy_pipeline_infos(v_device: &VDevice, infos: Vec<VPipelineInfo>) {
         for info in infos.iter() {
             info.destroy(v_device);
         }
     }
 
-    pub fn destroy(&self, v_device: &VDevice) {
+    pub fn destroy_framebuffers(&self, v_device: &VDevice) {
         unsafe {
             for &framebuffer in self.framebuffers.iter() {
                 v_device.device.destroy_framebuffer(framebuffer, None);
             }
+        }
+    }
+
+    pub fn destroy(&self, v_device: &VDevice) {
+        self.destroy_framebuffers(v_device);
+        unsafe {
             for &pipeline in self.pipelines.iter() {
                 v_device.device.destroy_pipeline(pipeline, None);
             }
