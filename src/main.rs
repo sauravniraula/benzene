@@ -12,7 +12,7 @@ fn main() {
     let mut v_backend = VBackend::new(&v_window);
 
     // Apps
-    let an_app = VApp::new(&v_backend);
+    let mut an_app = VApp::new(&v_backend);
 
     v_window.window.set_key_polling(true);
     while !v_window.window.should_close() {
@@ -30,7 +30,7 @@ fn main() {
             }
         }
 
-        v_backend.render(&v_window, vec![&an_app]);
+        v_backend.render(&v_window, vec![&mut an_app]);
     }
 
     v_backend.v_device.wait_till_idle();

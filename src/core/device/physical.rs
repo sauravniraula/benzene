@@ -4,6 +4,7 @@ use crate::core::{device::config::VPhysicalDeviceConfig, instance::VInstance, su
 
 pub struct VPhysicalDevice {
     pub physical_device: vk::PhysicalDevice,
+    pub properties: vk::PhysicalDeviceProperties,
     pub surface_formats: Vec<vk::SurfaceFormatKHR>,
     pub present_modes: Vec<vk::PresentModeKHR>,
     pub queue_families: Vec<vk::QueueFamilyProperties>,
@@ -107,6 +108,12 @@ impl VPhysicalDevice {
 
         let mut compatible_physical_devices: Vec<VPhysicalDevice> = vec![];
         for each_device in physical_devices {
+            let properties = unsafe {
+                v_instance
+                    .instance
+                    .get_physical_device_properties(each_device)
+            };
+
             let ext_properties = unsafe {
                 v_instance
                     .instance
@@ -175,6 +182,7 @@ impl VPhysicalDevice {
             let score = surface_formats.len() + present_modes.len() + queue_families.len();
             compatible_physical_devices.push(VPhysicalDevice {
                 physical_device: each_device,
+                properties,
                 surface_formats,
                 present_modes,
                 queue_families,

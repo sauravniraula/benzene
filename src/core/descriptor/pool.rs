@@ -3,7 +3,7 @@ use ash::vk;
 use crate::core::device::VDevice;
 
 pub struct VDescriptorPool {
-    pool: vk::DescriptorPool,
+    pub pool: vk::DescriptorPool,
 }
 
 impl VDescriptorPool {
@@ -24,5 +24,11 @@ impl VDescriptorPool {
         };
 
         Self { pool }
+    }
+
+    pub fn destroy(&self, v_device: &VDevice) {
+        unsafe {
+            v_device.device.destroy_descriptor_pool(self.pool, None);
+        }
     }
 }

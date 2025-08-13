@@ -1,4 +1,8 @@
-use std::{cell::Cell, u64};
+use std::{
+    cell::Cell,
+    time::{Duration, SystemTime},
+    u64,
+};
 
 use ash::vk;
 
@@ -11,7 +15,8 @@ pub struct VRenderer {
     pub ready_to_present_semaphores: Vec<vk::Semaphore>,
     pub buffer_free_fences: Vec<vk::Fence>,
     pub max_frames: usize,
-    pub current_frame: Cell<usize>,
+    pub frame_index: Cell<usize>,
+    pub last_render_time: Cell<SystemTime>,
 }
 
 impl VRenderer {
@@ -81,7 +86,8 @@ impl VRenderer {
             ready_to_present_semaphores,
             buffer_free_fences,
             max_frames,
-            current_frame: Cell::new(0),
+            frame_index: Cell::new(0),
+            last_render_time: Cell::new(SystemTime::now()),
         }
     }
 
@@ -89,22 +95,29 @@ impl VRenderer {
         &self,
         v_device: &VDevice,
         v_swapchain: &VSwapchain,
-        render: impl Fn(vk::CommandBuffer, usize) -> (),
+        mut render: impl FnMut(vk::CommandBuffer, usize, usize, Duration) -> (),
     ) -> VRenderResult {
-        let current_frame = self.current_frame.get();
-        match self.start_draw(v_device, v_swapchain, current_frame) {
+        let frame_index = self.frame_index.get();
+        let last_render_time = self.last_render_time.get();
+        let new_time = SystemTime::now();
+        let duration: Duration = new_time
+            .duration_since(last_render_time)
+            .expect("failed to get render duration");
+        self.last_render_time.set(new_time);
+
+        match self.start_draw(v_device, v_swapchain, frame_index) {
             Ok((command_buffer, image_index)) => {
-                render(command_buffer, image_index);
+                render(command_buffer, image_index, frame_index, duration);
                 let end_draw_result = self.end_draw(
                     v_device,
                     v_swapchain,
                     command_buffer,
                     image_index,
-                    current_frame,
+                    frame_index,
                 );
                 if let VRenderResult::Ok = end_draw_result {
-                    self.current_frame
-                        .replace((current_frame + 1) % self.max_frames);
+                    self.frame_index
+                        .replace((frame_index + 1) % self.max_frames);
                 }
                 end_draw_result
             }
@@ -116,13 +129,13 @@ impl VRenderer {
         &self,
         v_device: &VDevice,
         v_swapchain: &VSwapchain,
-        current_frame: usize,
+        frame_index: usize,
     ) -> Result<(vk::CommandBuffer, usize), VRenderResult> {
         unsafe {
             v_device
                 .device
                 .wait_for_fences(
-                    &self.buffer_free_fences[current_frame..current_frame + 1],
+                    &self.buffer_free_fences[frame_index..frame_index + 1],
                     true,
                     u64::MAX,
                 )
@@ -133,7 +146,7 @@ impl VRenderer {
             v_swapchain.swapchain_device.acquire_next_image(
                 v_swapchain.swapchain,
                 u64::MAX,
-                self.ready_to_submit_semaphores[current_frame],
+                self.ready_to_submit_semaphores[frame_index],
                 vk::Fence::null(),
             )
         };
@@ -146,18 +159,18 @@ impl VRenderer {
                 unsafe {
                     v_device
                         .device
-                        .reset_fences(&self.buffer_free_fences[current_frame..current_frame + 1])
+                        .reset_fences(&self.buffer_free_fences[frame_index..frame_index + 1])
                         .expect("failed to reset fence");
 
                     v_device
                         .device
                         .begin_command_buffer(
-                            self.command_buffers[current_frame],
+                            self.command_buffers[frame_index],
                             &vk::CommandBufferBeginInfo::default(),
                         )
                         .expect("failed to start command buffer")
                 };
-                Ok((self.command_buffers[current_frame], image_index as usize))
+                Ok((self.command_buffers[frame_index], image_index as usize))
             }
             _ => return Err(VRenderResult::RecreateSwapchain),
         }
@@ -169,7 +182,7 @@ impl VRenderer {
         v_swapchain: &VSwapchain,
         command_buffer: vk::CommandBuffer,
         image_index: usize,
-        current_frame: usize,
+        frame_index: usize,
     ) -> VRenderResult {
         unsafe {
             v_device
@@ -183,13 +196,14 @@ impl VRenderer {
                     v_device.graphics_queue,
                     &[vk::SubmitInfo::default()
                         .command_buffers(&[command_buffer])
+                        .wait_dst_stage_mask(&[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
                         .wait_semaphores(
-                            &self.ready_to_submit_semaphores[current_frame..current_frame + 1],
+                            &self.ready_to_submit_semaphores[frame_index..frame_index + 1],
                         )
                         .signal_semaphores(
-                            &self.ready_to_present_semaphores[current_frame..current_frame + 1],
+                            &self.ready_to_present_semaphores[frame_index..frame_index + 1],
                         )],
-                    self.buffer_free_fences[current_frame],
+                    self.buffer_free_fences[frame_index],
                 )
                 .expect("failed to submit command buffer");
 
@@ -199,7 +213,7 @@ impl VRenderer {
                     .swapchains(&[v_swapchain.swapchain])
                     .image_indices(&[image_index as u32])
                     .wait_semaphores(
-                        &self.ready_to_present_semaphores[current_frame..current_frame + 1],
+                        &self.ready_to_present_semaphores[frame_index..frame_index + 1],
                     ),
             );
             return match queue_present_result {

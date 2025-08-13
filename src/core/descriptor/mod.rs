@@ -4,4 +4,4 @@ pub mod set;
 
 pub use layout::VDescriptorLayout;
 pub use pool::VDescriptorPool;
-pub use set::VDescriptorSet;
+pub use set::VDescriptorSets;

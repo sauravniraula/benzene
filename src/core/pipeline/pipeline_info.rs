@@ -1,17 +1,24 @@
 use super::VPipelineInfoConfig;
-use crate::{core::device::VDevice, shared::load_file_as_vec_u32};
+use crate::{
+    core::{descriptor::VDescriptorLayout, device::VDevice},
+    shared::load_file_as_vec_u32,
+};
 use ash::vk;
 
-pub struct VPipelineInfo<'a> {
-    pub config: VPipelineInfoConfig<'a>,
+pub struct VPipelineInfo {
+    pub config: VPipelineInfoConfig,
     pub vert_shader_module: vk::ShaderModule,
     pub frag_shader_module: vk::ShaderModule,
     pub layout: vk::PipelineLayout,
     pub color_blend_attachments: Vec<vk::PipelineColorBlendAttachmentState>,
 }
 
-impl<'a> VPipelineInfo<'a> {
-    pub fn new(v_device: &VDevice, config: VPipelineInfoConfig<'a>) -> Self {
+impl VPipelineInfo {
+    pub fn new(
+        v_device: &VDevice,
+        config: VPipelineInfoConfig,
+        descriptor_layouts: &Vec<VDescriptorLayout>,
+    ) -> Self {
         let mut vert_shader_byte_code_path = config.vertex_shader_file.clone();
         vert_shader_byte_code_path.push_str(".spv");
         let mut frag_shader_byte_code_path = config.fragment_shader_file.clone();
@@ -38,14 +45,12 @@ impl<'a> VPipelineInfo<'a> {
                 .expect("failed to create fragment shader module")
         };
 
-        let descriptor_set_layouts: Vec<vk::DescriptorSetLayout> = config
-            .descriptor_layouts
-            .iter()
-            .map(|each| each.layout)
-            .collect();
+        let descriptor_set_layouts: Vec<vk::DescriptorSetLayout> =
+            descriptor_layouts.iter().map(|each| each.layout).collect();
 
         let layout_info =
             vk::PipelineLayoutCreateInfo::default().set_layouts(&descriptor_set_layouts);
+
         let layout = unsafe {
             v_device
                 .device
@@ -93,7 +98,16 @@ impl<'a> VPipelineInfo<'a> {
     }
 
     pub fn get_rasterization_stage(&self) -> vk::PipelineRasterizationStateCreateInfo {
-        vk::PipelineRasterizationStateCreateInfo::default().line_width(1.0)
+        vk::PipelineRasterizationStateCreateInfo::default()
+            .line_width(1.0)
+            .cull_mode(vk::CullModeFlags::BACK)
+            .front_face(vk::FrontFace::CLOCKWISE)
+    }
+
+    pub fn get_multisampling_stage(&self) -> vk::PipelineMultisampleStateCreateInfo {
+        vk::PipelineMultisampleStateCreateInfo::default()
+            .sample_shading_enable(false)
+            .rasterization_samples(vk::SampleCountFlags::TYPE_1)
     }
 
     pub fn get_color_blend_stage(&self) -> vk::PipelineColorBlendStateCreateInfo {

@@ -1,7 +1,6 @@
 pub mod backend;
 pub mod backend_event;
 pub mod device;
-pub mod game_objects;
 pub mod instance;
 pub mod memory;
 pub mod pipeline;

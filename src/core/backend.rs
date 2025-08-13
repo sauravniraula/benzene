@@ -34,6 +34,12 @@ impl VBackend {
             VPhysicalDeviceConfig::default(),
         );
         let v_physical_device = v_physical_devices.remove(0);
+
+        println!(
+            "Selected device: {:?}",
+            v_physical_device.properties.device_name_as_c_str()
+        );
+
         let v_device = VDevice::new(&v_instance, &v_surface, &v_physical_device);
         let v_memory_manager: VMemoryManager = VMemoryManager::new(&v_device);
         let v_swapchain = VSwapchain::new(
@@ -75,13 +81,13 @@ impl VBackend {
         self.basic_rendering_system.handle_backend_event(&event);
     }
 
-    pub fn render(&mut self, v_window: &VWindow, apps: Vec<&impl RenderableApp>) {
+    pub fn render(&mut self, v_window: &VWindow, mut apps: Vec<&mut impl RenderableApp>) {
         let render_result = self.v_renderer.render(
             &self.v_device,
             &self.v_swapchain,
-            |command_buffer, image_index| {
-                for app in apps.iter() {
-                    app.render_app(self, command_buffer, image_index);
+            |command_buffer, image_index, frame_index, duration| {
+                for app in apps.iter_mut() {
+                    app.render_app(self, command_buffer, image_index, frame_index, duration);
                 }
             },
         );

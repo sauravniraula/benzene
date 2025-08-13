@@ -7,41 +7,43 @@ use crate::core::{
     pipeline::{VPipelineInfo, VPipelineInfoConfig},
     rendering::{VRenderingSystem, VRenderingSystemConfig},
     swapchain::VSwapchain,
-    vertex_input::{BindableVertexInput, Vertex2D},
+    vertex_input::{BindableVertexInput, Vertex3D},
 };
 
 pub struct BasicRenderingSystem {
     v_rendering_system: VRenderingSystem,
+    pub pipeline_infos: Vec<VPipelineInfo>,
     pub descriptor_layouts: Vec<VDescriptorLayout>,
 }
 
 impl BasicRenderingSystem {
     pub fn new(v_device: &VDevice, v_swapchain: &VSwapchain) -> Self {
-        let vertex_binding_descriptions = Vertex2D::get_binding_descriptions();
-        let vertex_attribute_descriptions = Vertex2D::get_attribute_descriptions();
+        let vertex_binding_descriptions = Vertex3D::get_binding_descriptions();
+        let vertex_attribute_descriptions = Vertex3D::get_attribute_descriptions();
         let descriptor_layouts = vec![VDescriptorLayout::new(v_device)];
 
-        let v_pipeline_info = VPipelineInfo::new(
+        let pipeline_infos = vec![VPipelineInfo::new(
             &v_device,
             VPipelineInfoConfig {
                 binding_descriptions: vertex_binding_descriptions,
                 attribute_descriptions: vertex_attribute_descriptions,
                 vertex_shader_file: "src/shaders/shader.vert".into(),
                 fragment_shader_file: "src/shaders/shader.frag".into(),
-                descriptor_layouts: &descriptor_layouts,
             },
-        );
+            &descriptor_layouts,
+        )];
 
         let v_rendering_system = VRenderingSystem::new(
             v_device,
             v_swapchain,
             VRenderingSystemConfig {
-                pipeline_infos: vec![v_pipeline_info],
+                pipeline_infos: &pipeline_infos,
             },
         );
 
         Self {
             v_rendering_system,
+            pipeline_infos,
             descriptor_layouts,
         }
     }
@@ -54,6 +56,7 @@ impl BasicRenderingSystem {
         vertex_buffers: &[vk::Buffer],
         index_buffer: vk::Buffer,
         indices_count: u32,
+        descriptor_set: vk::DescriptorSet,
     ) {
         self.v_rendering_system
             .start(v_device, command_buffer, image_index);
@@ -70,6 +73,15 @@ impl BasicRenderingSystem {
                 vk::IndexType::UINT32,
             );
 
+            v_device.device.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline_infos[0].layout,
+                0,
+                &[descriptor_set],
+                &[],
+            );
+
             v_device
                 .device
                 .cmd_draw_indexed(command_buffer, indices_count, 1, 0, 0, 0);
@@ -83,6 +95,12 @@ impl BasicRenderingSystem {
     }
 
     pub fn destroy(&self, v_device: &VDevice) {
+        for each in self.pipeline_infos.iter() {
+            each.destroy(v_device);
+        }
+        for each in self.descriptor_layouts.iter() {
+            each.destroy(v_device);
+        }
         self.v_rendering_system.destroy(v_device);
     }
 }

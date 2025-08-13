@@ -73,11 +73,16 @@ impl VBuffer {
     }
 
     pub fn map_memory(&mut self, v_backend: &VBackend) -> VBufferState {
-        let mapped_at = v_backend
-            .v_memory_manager
-            .map_memory(&v_backend.v_device, self);
-        self.state = VBufferState::MAPPED(mapped_at);
-        return VBufferState::MAPPED(mapped_at);
+        match self.state {
+            VBufferState::UNMAPPED => {
+                let mapped_at = v_backend
+                    .v_memory_manager
+                    .map_memory(&v_backend.v_device, self);
+                self.state = VBufferState::MAPPED(mapped_at);
+                VBufferState::MAPPED(mapped_at)
+            }
+            VBufferState::MAPPED(addr) => VBufferState::MAPPED(addr),
+        }
     }
 
     pub fn unmap_memory(&mut self, v_backend: &VBackend) -> VBufferState {
@@ -109,7 +114,7 @@ impl VBuffer {
         let staging_buffer = VBuffer::new(
             v_backend,
             VBufferConfig {
-                size: self.memory_requirements.size,
+                size: size,
                 usage: vk::BufferUsageFlags::TRANSFER_SRC,
                 sharing_mode: vk::SharingMode::EXCLUSIVE,
                 queue_families: None,
