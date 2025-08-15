@@ -1,12 +1,6 @@
-pub mod backend;
-pub mod backend_event;
-pub mod device;
-pub mod instance;
-pub mod memory;
-pub mod pipeline;
-pub mod rendering;
-pub mod surface;
-pub mod swapchain;
-pub mod vertex_input;
-pub mod window;
-pub mod descriptor;
+pub mod game_engine;
+pub mod game_objects;
+pub mod scene;
+pub mod model;
+
+pub use game_engine::GameEngine;
