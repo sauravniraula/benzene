@@ -1,6 +1,9 @@
 use crate::vulkan_backend::{
-    backend_event::VBackendEvent, device::VDevice, pipeline::VPipelineInfo,
-    rendering::VRenderingSystemConfig, swapchain::VSwapchain,
+    backend_event::VBackendEvent,
+    device::VDevice,
+    pipeline::VPipelineInfo,
+    rendering::{VRenderingSystemConfig, info::VRenderInfo},
+    swapchain::VSwapchain,
 };
 use ash::vk::{self, Extent2D, Offset2D, Rect2D};
 
@@ -140,7 +143,7 @@ impl VRenderingSystem {
             .collect()
     }
 
-    pub fn start(&self, v_device: &VDevice, command_buffer: vk::CommandBuffer, image_index: usize) {
+    pub fn start(&self, v_device: &VDevice, info: &VRenderInfo) {
         let mut clear_values = [vk::ClearValue::default()];
         clear_values[0].color = vk::ClearColorValue {
             float32: [0.0, 0.0, 0.0, 1.0],
@@ -148,12 +151,12 @@ impl VRenderingSystem {
         let begin_info = vk::RenderPassBeginInfo::default()
             .render_pass(self.render_pass)
             .clear_values(&clear_values)
-            .framebuffer(self.framebuffers[image_index])
+            .framebuffer(self.framebuffers[info.image_index])
             .render_area(self.render_area);
 
         unsafe {
             v_device.device.cmd_begin_render_pass(
-                command_buffer,
+                info.command_buffer,
                 &begin_info,
                 vk::SubpassContents::INLINE,
             );
@@ -167,14 +170,14 @@ impl VRenderingSystem {
                 .max_depth(1f32);
             v_device
                 .device
-                .cmd_set_viewport(command_buffer, 0, &[viewport]);
+                .cmd_set_viewport(info.command_buffer, 0, &[viewport]);
             v_device
                 .device
-                .cmd_set_scissor(command_buffer, 0, &[self.render_area]);
+                .cmd_set_scissor(info.command_buffer, 0, &[self.render_area]);
 
             for each_pipeline in self.pipelines.iter() {
                 v_device.device.cmd_bind_pipeline(
-                    command_buffer,
+                    info.command_buffer,
                     vk::PipelineBindPoint::GRAPHICS,
                     *each_pipeline,
                 );
@@ -182,9 +185,9 @@ impl VRenderingSystem {
         };
     }
 
-    pub fn end(&self, v_device: &VDevice, command_buffer: vk::CommandBuffer) {
+    pub fn end(&self, v_device: &VDevice, info: &VRenderInfo) {
         unsafe {
-            v_device.device.cmd_end_render_pass(command_buffer);
+            v_device.device.cmd_end_render_pass(info.command_buffer);
         }
     }
 

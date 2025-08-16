@@ -5,21 +5,27 @@ use crate::{
     constants::MAX_FRAMES_IN_FLIGHT,
     vulkan_backend::{
         backend::VBackend,
-        descriptor::{VDescriptorPool, VDescriptorSets},
+        descriptor::{VDescriptorLayout, VDescriptorPool, VDescriptorSets},
         memory::VUniformBuffer,
     },
 };
 
+#[allow(dead_code)]
 pub struct CameraUniform {
     view: Matrix4<f32>,
     projection: Matrix4<f32>,
 }
 pub struct Camera {
     uniform_buffers: Vec<VUniformBuffer<CameraUniform>>,
+    descriptor_sets: VDescriptorSets,
 }
 
 impl Camera {
-    pub fn new(v_backend: &VBackend, v_descriptor_pool: &VDescriptorPool) -> Self {
+    pub fn new(
+        v_backend: &VBackend,
+        v_descriptor_pool: &VDescriptorPool,
+        layout: &VDescriptorLayout,
+    ) -> Self {
         let uniform_buffers: Vec<VUniformBuffer<_>> = (0..MAX_FRAMES_IN_FLIGHT)
             .map(|_| {
                 let mut u = VUniformBuffer::new(v_backend);
@@ -31,7 +37,7 @@ impl Camera {
         let descriptor_sets = VDescriptorSets::new(
             &v_backend.v_device,
             v_descriptor_pool,
-            &v_backend.basic_rendering_system.descriptor_layouts[0],
+            layout,
             MAX_FRAMES_IN_FLIGHT,
         );
         descriptor_sets.bind_all(
@@ -39,7 +45,10 @@ impl Camera {
             uniform_buffers.iter().map(|e| &e.v_buffer).collect(),
         );
 
-        Self { uniform_buffers }
+        Self {
+            uniform_buffers,
+            descriptor_sets,
+        }
     }
 
     pub fn update_uniform_buffer(&self, frame_index: usize, image_extent: Extent2D) {
@@ -57,5 +66,15 @@ impl Camera {
         projection[(1, 1)] *= -1.0;
         let gu = CameraUniform { view, projection };
         self.uniform_buffers[frame_index].copy(&gu);
+    }
+
+    pub fn descriptor_set(&self, frame_index: usize) -> ash::vk::DescriptorSet {
+        self.descriptor_sets.sets[frame_index]
+    }
+
+    pub fn destroy(&self, v_backend: &VBackend) {
+        for each in self.uniform_buffers.iter() {
+            each.destroy(v_backend);
+        }
     }
 }

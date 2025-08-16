@@ -14,7 +14,7 @@ impl VDescriptorPool {
 
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&pool_sizes)
-            .max_sets(3);
+            .max_sets(count as u32);
 
         let pool = unsafe {
             v_device

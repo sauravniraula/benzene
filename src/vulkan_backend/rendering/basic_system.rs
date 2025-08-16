@@ -1,16 +1,13 @@
 use ash::vk;
 
-use crate::{
-    core::scene::Scene,
-    vulkan_backend::{
-        backend_event::VBackendEvent,
-        descriptor::VDescriptorLayout,
-        device::VDevice,
-        pipeline::{VPipelineInfo, VPipelineInfoConfig},
-        rendering::{VRenderingSystem, VRenderingSystemConfig},
-        swapchain::VSwapchain,
-        vertex_input::{BindableVertexInput, Vertex3D},
-    },
+use crate::vulkan_backend::{
+    backend_event::VBackendEvent,
+    descriptor::VDescriptorLayout,
+    device::VDevice,
+    pipeline::{VPipelineInfo, VPipelineInfoConfig},
+    rendering::{VRenderingSystem, VRenderingSystemConfig, info::VRenderInfo},
+    swapchain::VSwapchain,
+    vertex_input::{BindableVertexInput, Vertex3D},
 };
 
 pub struct BasicRenderingSystem {
@@ -18,6 +15,8 @@ pub struct BasicRenderingSystem {
     pub pipeline_infos: Vec<VPipelineInfo>,
     pub descriptor_layouts: Vec<VDescriptorLayout>,
 }
+
+use super::recordable::Recordable;
 
 impl BasicRenderingSystem {
     pub fn new(v_device: &VDevice, v_swapchain: &VSwapchain) -> Self {
@@ -51,43 +50,25 @@ impl BasicRenderingSystem {
         }
     }
 
-    pub fn render(
-        &self,
-        v_device: &VDevice,
-        command_buffer: vk::CommandBuffer,
-        image_index: usize,
-        scenes: Vec<&Scene>,
-    ) {
-        self.v_rendering_system
-            .start(v_device, command_buffer, image_index);
+    pub fn get_descriptor_set_layout_at_binding(&self, binding: usize) -> &VDescriptorLayout {
+        &self.descriptor_layouts[binding]
+    }
 
-        // unsafe {
-        //     v_device
-        //         .device
-        //         .cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &[0]);
+    pub fn render(&self, v_device: &VDevice, info: &VRenderInfo, recordables: &[&dyn Recordable]) {
+        self.v_rendering_system.start(v_device, info);
 
-        //     v_device.device.cmd_bind_index_buffer(
-        //         command_buffer,
-        //         index_buffer,
-        //         0,
-        //         vk::IndexType::UINT32,
-        //     );
+        let pipeline_layouts: Vec<vk::PipelineLayout> =
+            self.pipeline_infos.iter().map(|p| p.layout).collect();
+        for recordable in recordables.iter() {
+            recordable.record(
+                v_device,
+                info.command_buffer,
+                info.frame_index,
+                &pipeline_layouts,
+            );
+        }
 
-        //     v_device.device.cmd_bind_descriptor_sets(
-        //         command_buffer,
-        //         vk::PipelineBindPoint::GRAPHICS,
-        //         self.pipeline_infos[0].layout,
-        //         0,
-        //         &[descriptor_set],
-        //         &[],
-        //     );
-
-        //     v_device
-        //         .device
-        //         .cmd_draw_indexed(command_buffer, indices_count, 1, 0, 0, 0);
-        // }
-
-        self.v_rendering_system.end(v_device, command_buffer);
+        self.v_rendering_system.end(v_device, info);
     }
 
     pub fn handle_backend_event(&mut self, event: &VBackendEvent) {
