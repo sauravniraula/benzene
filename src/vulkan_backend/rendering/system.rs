@@ -174,14 +174,6 @@ impl VRenderingSystem {
             v_device
                 .device
                 .cmd_set_scissor(info.command_buffer, 0, &[self.render_area]);
-
-            for each_pipeline in self.pipelines.iter() {
-                v_device.device.cmd_bind_pipeline(
-                    info.command_buffer,
-                    vk::PipelineBindPoint::GRAPHICS,
-                    *each_pipeline,
-                );
-            }
         };
     }
 

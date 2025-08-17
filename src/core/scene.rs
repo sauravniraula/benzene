@@ -1,13 +1,10 @@
 use crate::{
     constants::MAX_FRAMES_IN_FLIGHT,
     core::game_objects::camera::Camera,
-    core::gpu::{model::Model, resources::camera_gpu::CameraGpu, scene_render::SceneRender},
-    core::resources::primitives::cube::Cube,
-    vulkan_backend::{
-        backend::VBackend,
-        device::VDevice,
-        rendering::{Drawable, Recordable},
-    },
+    core::gpu::{model::Model, resources::camera_gpu::CameraGpu},
+    core::rendering::{scene_render::SceneRender, recordable::{Drawable, Recordable}},
+    core::resources::primitives::{cube::Cube, plane::Plane},
+    vulkan_backend::{backend::VBackend, rendering::RecordContext},
 };
 use ash::vk;
 use glfw::WindowEvent;
@@ -26,7 +23,7 @@ impl Scene {
         let camera_sets = scene_render.allocate_descriptor_sets(&v_backend.v_device, layout, MAX_FRAMES_IN_FLIGHT);
         let camera_gpu = CameraGpu::new_with_sets(v_backend, camera_sets);
         camera_gpu.bind_buffers(v_backend);
-        let models = vec![Cube::create_model(v_backend)];
+        let models = vec![Plane::create_model(v_backend), Cube::create_model(v_backend)];
 
         Self { camera, camera_gpu, models }
     }
@@ -35,8 +32,8 @@ impl Scene {
         self.camera.handle_window_event(event);
     }
 
-    pub fn update(&mut self, frame_index: usize, image_extent: vk::Extent2D) {
-        self.camera.update(frame_index, image_extent);
+    pub fn update(&mut self, frame_index: usize, image_extent: vk::Extent2D, dt: f32) {
+        self.camera.update(frame_index, image_extent, dt);
         let uniform = self.camera.get_uniform(image_extent);
         self.camera_gpu.upload(frame_index, &uniform);
     }
@@ -51,25 +48,19 @@ impl Scene {
 }
 
 impl Recordable for Scene {
-    fn record(
-        &self,
-        v_device: &VDevice,
-        command_buffer: vk::CommandBuffer,
-        frame_index: usize,
-        pipeline_layouts: &[vk::PipelineLayout],
-    ) {
+    fn record(&self, ctx: &RecordContext) {
         unsafe {
-            v_device.device.cmd_bind_descriptor_sets(
-                command_buffer,
+            ctx.v_device.device.cmd_bind_descriptor_sets(
+                ctx.cmd,
                 vk::PipelineBindPoint::GRAPHICS,
-                pipeline_layouts[0],
+                ctx.pipeline_layout,
                 0,
-                &[self.camera_gpu.descriptor_set(frame_index)],
+                &[self.camera_gpu.descriptor_set(ctx.frame_index)],
                 &[],
             );
 
             for model in self.models.iter() {
-                model.draw(v_device, command_buffer);
+                model.draw(ctx.v_device, ctx.cmd);
             }
         }
     }

@@ -1,4 +1,4 @@
-use vulkan_engine::core::GameEngine;
+use benzene::core::GameEngine;
 
 fn main() {
     let mut game_engine = GameEngine::new();

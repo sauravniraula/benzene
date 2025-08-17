@@ -4,9 +4,9 @@ use crate::vulkan_backend::{
 	backend::VBackend,
 	device::VDevice,
 	memory::{VBuffer, VBufferConfig},
-	rendering::Drawable,
 	vertex_input::Vertex3D,
 };
+use crate::core::rendering::recordable::Drawable;
 
 pub struct Model {
 	pub v_buffer: VBuffer,

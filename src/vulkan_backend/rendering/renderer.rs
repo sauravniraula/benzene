@@ -1,6 +1,5 @@
 use std::{
     cell::Cell,
-    time::{Duration, SystemTime},
     u64,
 };
 
@@ -20,7 +19,6 @@ pub struct VRenderer {
     pub buffer_free_fences: Vec<vk::Fence>,
     pub max_frames: usize,
     pub frame_index: Cell<usize>,
-    pub last_render_time: Cell<SystemTime>,
 }
 
 impl VRenderer {
@@ -91,7 +89,6 @@ impl VRenderer {
             buffer_free_fences,
             max_frames,
             frame_index: Cell::new(0),
-            last_render_time: Cell::new(SystemTime::now()),
         }
     }
 
@@ -102,12 +99,6 @@ impl VRenderer {
         render: impl Fn(VRenderInfo) -> (),
     ) -> VRenderResult {
         let frame_index = self.frame_index.get();
-        let last_render_time = self.last_render_time.get();
-        let new_time = SystemTime::now();
-        let duration: Duration = new_time
-            .duration_since(last_render_time)
-            .expect("failed to get render duration");
-        self.last_render_time.set(new_time);
 
         match self.start_draw(v_device, v_swapchain, frame_index) {
             Ok((command_buffer, image_index)) => {
@@ -115,7 +106,6 @@ impl VRenderer {
                     command_buffer,
                     image_index,
                     frame_index,
-                    duration,
                 });
 
                 let end_draw_result = self.end_draw(
