@@ -1,7 +1,7 @@
 #!/bin/bash
 
-SHADER_DIR="src/shaders"
-OUTPUT_DIR="src/shaders"
+SHADER_DIR="assets/shaders"
+OUTPUT_DIR="assets/shaders"
 
 if ! command -v glslc &>/dev/null; then
     echo "Error: glslc not found. Please install Vulkan SDK or shaderc-tools."

@@ -1,10 +1,13 @@
 use nalgebra::Vector3;
 
-use crate::vulkan_backend::vertex_input::Vertex3D;
+use crate::{
+    core::gpu::model::Model,
+    vulkan_backend::{backend::VBackend, vertex_input::Vertex3D},
+};
 
-pub struct PrimitiveCube;
+pub struct Cube;
 
-impl PrimitiveCube {
+impl Cube {
     pub fn geometry() -> (Vec<Vertex3D>, Vec<u32>) {
         let half = 0.5f32;
         let front_color = Vector3::new(1.0, 0.0, 0.0);
@@ -51,6 +54,11 @@ impl PrimitiveCube {
         ];
 
         (vertices, indices)
+    }
+
+    pub fn create_model(v_backend: &VBackend) -> Model {
+        let (vertices, indices) = Self::geometry();
+        Model::new(v_backend, &vertices, &indices)
     }
 }
 

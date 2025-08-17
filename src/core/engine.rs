@@ -2,8 +2,11 @@ use glfw::{Action, Key, WindowEvent};
 use nalgebra::Matrix4;
 
 use crate::{
-    core::scene::Scene,
-    vulkan_backend::{backend::VBackend, rendering::info::VRenderInfo},
+    core::{gpu::scene_render::SceneRender, scene::Scene},
+    vulkan_backend::{
+        backend::VBackend,
+        rendering::{Recordable, info::VRenderInfo},
+    },
     window::{Window, WindowConfig},
 };
 
@@ -16,6 +19,7 @@ pub struct GlobalUniform {
 pub struct GameEngine {
     window: Window,
     v_backend: VBackend,
+    scene_render: SceneRender,
     active_scene: Option<Scene>,
 }
 
@@ -23,17 +27,19 @@ impl GameEngine {
     pub fn new() -> Self {
         let window = Window::new(WindowConfig::default());
         let v_backend = VBackend::new(&window);
+        let scene_render = SceneRender::new(&v_backend);
 
         let engine = Self {
             window,
             v_backend,
+            scene_render,
             active_scene: None,
         };
         engine
     }
 
     pub fn create_scene(&self) -> Scene {
-        Scene::new(&self.v_backend)
+        Scene::new(&self.v_backend, &self.scene_render)
     }
 
     pub fn set_active_scene(&mut self, scene: Scene) {
@@ -42,13 +48,23 @@ impl GameEngine {
 
     pub fn run(&mut self) {
         self.window.pwindow.set_key_polling(true);
+        self.window.pwindow.set_cursor_pos_polling(true);
+        self.window
+            .pwindow
+            .set_cursor_mode(glfw::CursorMode::Disabled);
         while !self.window.pwindow.should_close() {
             self.window.glfwi.poll_events();
             self.handle_window_events();
 
+            if let Some(scene) = &mut self.active_scene {
+                let frame_index = self.v_backend.v_renderer.frame_index.get();
+                scene.update(frame_index, self.v_backend.v_swapchain.image_extent);
+            }
+
             let render_result = self.v_backend.render(|info| self.render(&info));
-            self.v_backend
-                .check_render_issues(&self.window, render_result);
+            if let Some(event) = self.v_backend.check_render_issues(&self.window, render_result) {
+                self.scene_render.handle_backend_event(&event);
+            }
         }
     }
 
@@ -62,18 +78,17 @@ impl GameEngine {
                 }
                 _ => {}
             }
+            if let Some(scene) = &mut self.active_scene {
+                scene.handle_window_event(&event);
+            }
         }
     }
 
     fn render(&self, info: &VRenderInfo) {
         if let Some(scene) = &self.active_scene {
-            scene.update(info.frame_index, self.v_backend.v_swapchain.image_extent);
-            let recordables: [&dyn crate::vulkan_backend::rendering::Recordable; 1] = [scene];
-            self.v_backend.basic_rendering_system.render(
-                &self.v_backend.v_device,
-                info,
-                &recordables,
-            );
+            let recordables: [&dyn Recordable; 1] = [scene];
+            self.scene_render
+                .render(&self.v_backend.v_device, info, &recordables);
         }
     }
 
@@ -82,6 +97,7 @@ impl GameEngine {
         if let Some(scene) = &self.active_scene {
             scene.destroy(&self.v_backend);
         }
+        self.scene_render.destroy(&self.v_backend.v_device);
         self.v_backend.destroy();
     }
 }

@@ -1,6 +1,7 @@
-pub mod game_engine;
+pub mod engine;
+pub mod gpu;
 pub mod game_objects;
 pub mod scene;
-pub mod model;
+pub mod resources;
 
-pub use game_engine::GameEngine;
+pub use engine::GameEngine;

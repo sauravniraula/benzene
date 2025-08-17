@@ -5,7 +5,7 @@ use crate::{
         device::{VDevice, VPhysicalDevice, config::VPhysicalDeviceConfig},
         instance::{VInstance, VInstanceConfig},
         memory::VMemoryManager,
-        rendering::{BasicRenderingSystem, VRenderResult, VRenderer, info::VRenderInfo},
+        rendering::{VRenderResult, VRenderer, info::VRenderInfo},
         surface::VSurface,
         swapchain::VSwapchain,
     },
@@ -20,7 +20,6 @@ pub struct VBackend {
     pub v_memory_manager: VMemoryManager,
     pub v_swapchain: VSwapchain,
     pub v_renderer: VRenderer,
-    pub basic_rendering_system: BasicRenderingSystem,
 }
 
 impl VBackend {
@@ -49,7 +48,6 @@ impl VBackend {
             &v_device,
         );
         let v_renderer = VRenderer::new(&v_device, MAX_FRAMES_IN_FLIGHT);
-        let basic_rendering_system = BasicRenderingSystem::new(&v_device, &v_swapchain);
 
         Self {
             v_instance,
@@ -59,7 +57,6 @@ impl VBackend {
             v_memory_manager,
             v_swapchain,
             v_renderer,
-            basic_rendering_system,
         }
     }
 
@@ -75,18 +72,13 @@ impl VBackend {
         );
     }
 
-    pub fn emit_update_framebuffers_event(&mut self) {
-        let event = VBackendEvent::UpdateFramebuffers(&self.v_device, &self.v_swapchain);
-        self.basic_rendering_system.handle_backend_event(&event);
-    }
-
-    pub fn check_render_issues(&mut self, window: &Window, result: VRenderResult) {
+    pub fn check_render_issues<'a>(&'a mut self, window: &Window, result: VRenderResult) -> Option<VBackendEvent<'a>> {
         match result {
             VRenderResult::RecreateSwapchain => {
                 self.recreate_swapchain(window);
-                self.emit_update_framebuffers_event();
+                Some(VBackendEvent::UpdateFramebuffers(&self.v_device, &self.v_swapchain))
             }
-            _ => {}
+            _ => None,
         }
     }
 
@@ -97,7 +89,6 @@ impl VBackend {
 
     pub fn destroy(&self) {
         self.v_renderer.destroy(&self.v_device);
-        self.basic_rendering_system.destroy(&self.v_device);
         self.v_swapchain.destroy(&self.v_device);
         self.v_memory_manager.destroy(&self.v_device);
         self.v_device.destroy();

@@ -1,62 +1,52 @@
 use crate::{
     constants::MAX_FRAMES_IN_FLIGHT,
     core::game_objects::camera::Camera,
-    core::game_objects::primitive_cube::PrimitiveCube,
-    core::model::VModel,
+    core::gpu::{model::Model, resources::camera_gpu::CameraGpu, scene_render::SceneRender},
+    core::resources::primitives::cube::Cube,
     vulkan_backend::{
         backend::VBackend,
-        descriptor::{VDescriptorLayout, VDescriptorPool, VDescriptorSets},
         device::VDevice,
         rendering::{Drawable, Recordable},
     },
 };
 use ash::vk;
+use glfw::WindowEvent;
 
 pub struct Scene {
-    v_descriptor_pool: VDescriptorPool,
     camera: Camera,
-    models: Vec<VModel>,
+    camera_gpu: CameraGpu,
+    models: Vec<Model>,
 }
 
 impl Scene {
-    pub fn new(v_backend: &VBackend) -> Self {
-        // Descriptor Pool
-        let v_descriptor_pool = VDescriptorPool::new(&v_backend.v_device, MAX_FRAMES_IN_FLIGHT);
+    pub fn new(v_backend: &VBackend, scene_render: &SceneRender) -> Self {
+        let layout = scene_render.get_descriptor_set_layout_at_binding(0);
 
-        // Camera
-        let layout = v_backend
-            .basic_rendering_system
-            .get_descriptor_set_layout_at_binding(0);
-        let camera = Camera::new(v_backend, &v_descriptor_pool, layout);
-        let (vertices, indices) = PrimitiveCube::geometry();
-        let models = vec![VModel::new(v_backend, &vertices, &indices)];
+        let camera = Camera::new();
+        let camera_sets = scene_render.allocate_descriptor_sets(&v_backend.v_device, layout, MAX_FRAMES_IN_FLIGHT);
+        let camera_gpu = CameraGpu::new_with_sets(v_backend, camera_sets);
+        camera_gpu.bind_buffers(v_backend);
+        let models = vec![Cube::create_model(v_backend)];
 
-        Self {
-            v_descriptor_pool,
-            camera,
-            models,
-        }
+        Self { camera, camera_gpu, models }
     }
 
-    pub fn allocate_uniform_sets(
-        &self,
-        v_backend: &VBackend,
-        layout: &VDescriptorLayout,
-        count: usize,
-    ) -> VDescriptorSets {
-        VDescriptorSets::new(&v_backend.v_device, &self.v_descriptor_pool, layout, count)
+    pub fn handle_window_event(&mut self, event: &WindowEvent) {
+        self.camera.handle_window_event(event);
     }
 
-    pub fn update(&self, frame_index: usize, image_extent: vk::Extent2D) {
-        self.camera.update_uniform_buffer(frame_index, image_extent);
+    pub fn update(&mut self, frame_index: usize, image_extent: vk::Extent2D) {
+        self.camera.update(frame_index, image_extent);
+        let uniform = self.camera.get_uniform(image_extent);
+        self.camera_gpu.upload(frame_index, &uniform);
     }
 
     pub fn destroy(&self, v_backend: &VBackend) {
-        self.camera.destroy(v_backend);
+        self.camera.destroy();
+        self.camera_gpu.destroy(v_backend);
         for each in self.models.iter() {
             each.destroy(v_backend);
         }
-        self.v_descriptor_pool.destroy(&v_backend.v_device);
     }
 }
 
@@ -69,13 +59,12 @@ impl Recordable for Scene {
         pipeline_layouts: &[vk::PipelineLayout],
     ) {
         unsafe {
-            // Bind descriptor set for camera for this frame
             v_device.device.cmd_bind_descriptor_sets(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 pipeline_layouts[0],
                 0,
-                &[self.camera.descriptor_set(frame_index)],
+                &[self.camera_gpu.descriptor_set(frame_index)],
                 &[],
             );
 

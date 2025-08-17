@@ -1,57 +1,60 @@
 use ash::vk;
 
 use crate::vulkan_backend::{
+    backend::VBackend,
     backend_event::VBackendEvent,
-    descriptor::VDescriptorLayout,
+    descriptor::{VDescriptorLayout, VDescriptorPool, VDescriptorSets},
     device::VDevice,
     pipeline::{VPipelineInfo, VPipelineInfoConfig},
     rendering::{VRenderingSystem, VRenderingSystemConfig, info::VRenderInfo},
-    swapchain::VSwapchain,
     vertex_input::{BindableVertexInput, Vertex3D},
 };
 
-pub struct BasicRenderingSystem {
+use crate::{constants::MAX_FRAMES_IN_FLIGHT, vulkan_backend::rendering::Recordable};
+
+pub struct SceneRender {
     v_rendering_system: VRenderingSystem,
     pub pipeline_infos: Vec<VPipelineInfo>,
     pub descriptor_layouts: Vec<VDescriptorLayout>,
+    descriptor_pool: VDescriptorPool,
 }
 
-use super::recordable::Recordable;
-
-impl BasicRenderingSystem {
-    pub fn new(v_device: &VDevice, v_swapchain: &VSwapchain) -> Self {
+impl SceneRender {
+    pub fn new(v_backend: &VBackend) -> Self {
         let vertex_binding_descriptions = Vertex3D::get_binding_descriptions();
         let vertex_attribute_descriptions = Vertex3D::get_attribute_descriptions();
-        let descriptor_layouts = vec![VDescriptorLayout::new(v_device)];
+        let descriptor_layouts = vec![VDescriptorLayout::new(&v_backend.v_device)];
 
         let pipeline_infos = vec![VPipelineInfo::new(
-            &v_device,
+            &v_backend.v_device,
             VPipelineInfoConfig {
                 binding_descriptions: vertex_binding_descriptions,
                 attribute_descriptions: vertex_attribute_descriptions,
-                vertex_shader_file: "src/shaders/shader.vert".into(),
-                fragment_shader_file: "src/shaders/shader.frag".into(),
+                vertex_shader_file: "assets/shaders/shader.vert".into(),
+                fragment_shader_file: "assets/shaders/shader.frag".into(),
             },
             &descriptor_layouts,
         )];
 
         let v_rendering_system = VRenderingSystem::new(
-            v_device,
-            v_swapchain,
+            &v_backend.v_device,
+            &v_backend.v_swapchain,
             VRenderingSystemConfig {
                 pipeline_infos: &pipeline_infos,
             },
         );
 
-        Self {
-            v_rendering_system,
-            pipeline_infos,
-            descriptor_layouts,
-        }
+        let descriptor_pool = VDescriptorPool::new(&v_backend.v_device, MAX_FRAMES_IN_FLIGHT);
+
+        Self { v_rendering_system, pipeline_infos, descriptor_layouts, descriptor_pool }
     }
 
     pub fn get_descriptor_set_layout_at_binding(&self, binding: usize) -> &VDescriptorLayout {
         &self.descriptor_layouts[binding]
+    }
+
+    pub fn allocate_descriptor_sets(&self, v_device: &VDevice, layout: &VDescriptorLayout, count: usize) -> VDescriptorSets {
+        VDescriptorSets::new(v_device, &self.descriptor_pool, layout, count)
     }
 
     pub fn render(&self, v_device: &VDevice, info: &VRenderInfo, recordables: &[&dyn Recordable]) {
@@ -82,6 +85,7 @@ impl BasicRenderingSystem {
         for each in self.descriptor_layouts.iter() {
             each.destroy(v_device);
         }
+        self.descriptor_pool.destroy(v_device);
         self.v_rendering_system.destroy(v_device);
     }
 }
