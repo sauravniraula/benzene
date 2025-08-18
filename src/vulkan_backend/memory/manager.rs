@@ -46,45 +46,34 @@ impl VMemoryManager {
         }
     }
 
-    pub fn map_memory(&self, v_device: &VDevice, v_buffer: &VBuffer) -> *mut u8 {
+    pub fn map_memory(&self, v_device: &VDevice, memory: vk::DeviceMemory, size: u64) -> *mut u8 {
         unsafe {
             v_device
                 .device
-                .map_memory(
-                    v_buffer.memory,
-                    0,
-                    v_buffer.memory_requirements.size,
-                    vk::MemoryMapFlags::empty(),
-                )
+                .map_memory(memory, 0, size, vk::MemoryMapFlags::empty())
                 .expect("failed to map memory") as *mut u8
         }
     }
 
-    pub fn unmap_memory(&self, v_device: &VDevice, v_buffer: &VBuffer) {
-        unsafe { v_device.device.unmap_memory(v_buffer.memory) };
+    pub fn unmap_memory(&self, v_device: &VDevice, memory: vk::DeviceMemory) {
+        unsafe { v_device.device.unmap_memory(memory) };
     }
 
-    pub fn copy_to_host_visible(
+    pub fn copy_data_to_memory(
         &self,
         v_device: &VDevice,
-        v_buffer: &VBuffer,
+        memory: vk::DeviceMemory,
         data: *const u8,
         size: u64,
     ) {
         unsafe {
-            let destination = self.map_memory(v_device, v_buffer);
+            let destination = self.map_memory(v_device, memory, size);
             std::ptr::copy_nonoverlapping(data, destination, size as usize);
-            v_device.device.unmap_memory(v_buffer.memory);
+            v_device.device.unmap_memory(memory);
         };
     }
 
-    pub fn copy_to_device_local(
-        &self,
-        v_device: &VDevice,
-        from: &VBuffer,
-        to: &VBuffer,
-        size: u64,
-    ) {
+    pub fn run_single_cmd_submit(&self, v_device: &VDevice, func: impl Fn(vk::CommandBuffer) -> ()) {
         let alloc_info = vk::CommandBufferAllocateInfo::default()
             .command_pool(self.command_pool)
             .command_buffer_count(1);
@@ -103,13 +92,8 @@ impl VMemoryManager {
                 )
                 .expect("failed to begin command buffer on VMemoryManager");
 
-            let copy_regions = [vk::BufferCopy::default().size(size)];
-            v_device.device.cmd_copy_buffer(
-                command_buffers[0],
-                from.buffer,
-                to.buffer,
-                &copy_regions,
-            );
+            func(command_buffers[0]);
+
             v_device
                 .device
                 .end_command_buffer(command_buffers[0])

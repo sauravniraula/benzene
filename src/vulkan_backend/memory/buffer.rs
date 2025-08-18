@@ -75,9 +75,11 @@ impl VBuffer {
     pub fn map_memory(&mut self, v_backend: &VBackend) -> VBufferState {
         match self.state {
             VBufferState::UNMAPPED => {
-                let mapped_at = v_backend
-                    .v_memory_manager
-                    .map_memory(&v_backend.v_device, self);
+                let mapped_at = v_backend.v_memory_manager.map_memory(
+                    &v_backend.v_device,
+                    self.memory,
+                    self.config.size,
+                );
                 self.state = VBufferState::MAPPED(mapped_at);
                 VBufferState::MAPPED(mapped_at)
             }
@@ -91,7 +93,7 @@ impl VBuffer {
             VBufferState::MAPPED(_) => {
                 v_backend
                     .v_memory_manager
-                    .unmap_memory(&v_backend.v_device, self);
+                    .unmap_memory(&v_backend.v_device, self.memory);
                 self.state = VBufferState::UNMAPPED;
                 VBufferState::UNMAPPED
             }
@@ -106,9 +108,12 @@ impl VBuffer {
 
     pub fn copy_to_buffer(&self, v_backend: &VBackend, data: *const u8, size: u64) {
         if self.is_host_visible() {
-            v_backend
-                .v_memory_manager
-                .copy_to_host_visible(&v_backend.v_device, self, data, size);
+            v_backend.v_memory_manager.copy_data_to_memory(
+                &v_backend.v_device,
+                self.memory,
+                data,
+                size,
+            );
             return;
         }
         let staging_buffer = VBuffer::new(
@@ -123,12 +128,19 @@ impl VBuffer {
             },
         );
         staging_buffer.copy_to_buffer(v_backend, data, size);
-        v_backend.v_memory_manager.copy_to_device_local(
-            &v_backend.v_device,
-            &staging_buffer,
-            self,
-            size,
-        );
+        v_backend
+            .v_memory_manager
+            .run_single_cmd_submit(&v_backend.v_device, |cmd| {
+                let copy_regions = [vk::BufferCopy::default().size(size)];
+                unsafe {
+                    v_backend.v_device.device.cmd_copy_buffer(
+                        cmd,
+                        staging_buffer.buffer,
+                        self.buffer,
+                        &copy_regions,
+                    );
+                }
+            });
         staging_buffer.destroy(v_backend);
     }
 

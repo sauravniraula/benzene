@@ -3,15 +3,13 @@ use crate::{
         game_objects::camera::Camera,
         gpu::{
             model::Model,
-            resources::{
-                global_uniform::{GlobalUniform, GlobalUniformObject},
-                image_texture::ImageTexture,
-            },
+            resources::global_uniform::{GlobalUniform, GlobalUniformObject},
         },
         rendering::{
             recordable::{Drawable, Recordable},
             scene_render::SceneRender,
         },
+        resources::image::Image,
     },
     vulkan_backend::{backend::VBackend, rendering::RecordContext},
 };
@@ -44,7 +42,7 @@ impl Scene {
         scene.global_uniform.upload_all(&uniform);
 
         // Image Texture
-        let texture = ImageTexture::new(v_backend, "assets/textures/cracked-dirt512x512.jpg");
+        let texture = Image::new(v_backend, "assets/textures/cracked-dirt512x512.jpg");
 
         scene
     }
