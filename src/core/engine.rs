@@ -1,18 +1,16 @@
 use glfw::{Action, Key, WindowEvent};
-use nalgebra::Matrix4;
 use std::time::Instant;
 
 use crate::{
-    core::{rendering::{scene_render::SceneRender, recordable::Recordable}, scene::Scene},
+    core::{
+        gpu::model::Model,
+        rendering::{recordable::Recordable, scene_render::SceneRender},
+        resources::primitives::ModelBuilder,
+        scene::Scene,
+    },
     vulkan_backend::{backend::VBackend, rendering::info::VRenderInfo},
     window::{Window, WindowConfig},
 };
-
-pub struct GlobalUniform {
-    pub model: Matrix4<f32>,
-    pub view: Matrix4<f32>,
-    pub projection: Matrix4<f32>,
-}
 
 pub struct GameEngine {
     window: Window,
@@ -46,14 +44,16 @@ impl GameEngine {
         self.active_scene = Some(scene);
     }
 
+    pub fn build_model<B: ModelBuilder>(&self) -> Model {
+        B::create_model(&self.v_backend)
+    }
+
     pub fn run(&mut self) {
         self.window.pwindow.set_key_polling(true);
-        self.window.pwindow.set_cursor_pos_polling(true);
         self.window
             .pwindow
-            .set_cursor_mode(glfw::CursorMode::Disabled);
+            .set_cursor_mode(glfw::CursorMode::Normal);
         while !self.window.pwindow.should_close() {
-            // Compute delta time on the engine side
             let now = Instant::now();
             let dt = (now - self.last_frame_instant).as_secs_f32();
             self.last_frame_instant = now;
@@ -67,7 +67,10 @@ impl GameEngine {
             }
 
             let render_result = self.v_backend.render(|info| self.render(&info));
-            if let Some(event) = self.v_backend.check_render_issues(&self.window, render_result) {
+            if let Some(event) = self
+                .v_backend
+                .check_render_issues(&self.window, render_result)
+            {
                 self.scene_render.handle_backend_event(&event);
             }
         }

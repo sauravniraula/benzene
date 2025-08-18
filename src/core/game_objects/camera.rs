@@ -2,71 +2,49 @@ use ash::vk::Extent2D;
 use glfw::{Action, Key, WindowEvent};
 use nalgebra::{Matrix4, Point3, Vector3};
 use std::collections::HashSet;
-
-pub struct CameraUniform {
-    pub view: Matrix4<f32>,
-    pub projection: Matrix4<f32>,
-}
 pub struct Camera {
     position: Point3<f32>,
-    target: Point3<f32>,
     speed: f32,
     yaw: f32,
     pitch: f32,
-    mouse_sensitivity: f32,
-    last_cursor_pos: Option<(f64, f64)>,
+    rotation_speed: f32,
     pressed_keys: HashSet<Key>,
+    dirty: bool,
 }
 
 impl Camera {
     pub fn new() -> Self {
-        let position = Point3::<f32>::new(2.0, 2.0, 2.0);
-        let target = Point3::<f32>::new(0.0, 0.0, 0.0);
-        let forward = (target - position).normalize();
+        let position = Point3::<f32>::new(-5.0, 5.0, -5.0);
+        let look_at = Point3::<f32>::new(0.0, 0.0, 0.0);
+        let forward = (look_at - position).normalize();
         let yaw: f32 = forward.z.atan2(forward.x);
         let pitch: f32 = forward.y.asin();
 
         Self {
             position,
-            target,
             speed: 5.0,
             yaw,
             pitch,
-            mouse_sensitivity: 0.001,
-            last_cursor_pos: None,
+            rotation_speed: 1.5,
             pressed_keys: HashSet::new(),
+            dirty: true,
         }
     }
 
     fn translate(&mut self, delta: Vector3<f32>) {
         self.position = self.position + delta;
-        self.target = self.target + delta;
+        self.dirty = true;
     }
 
     fn basis_vectors(&self) -> (Vector3<f32>, Vector3<f32>, Vector3<f32>) {
         let world_up = Vector3::new(0.0, 1.0, 0.0);
-        let mut forward = (self.target - self.position).normalize();
-        // Prevent NaNs if position == target; default forward to -Z
-        if !forward.iter().all(|c| c.is_finite()) {
-            forward = Vector3::new(0.0, 0.0, -1.0);
-        }
-        let mut right = forward.cross(&world_up).normalize();
-        if !right.iter().all(|c| c.is_finite()) {
-            right = Vector3::new(1.0, 0.0, 0.0);
-        }
+        let cos_pitch = self.pitch.cos();
+        let forward = Vector3::new(cos_pitch * self.yaw.cos(), self.pitch.sin(), cos_pitch * self.yaw.sin());
+        let right = forward.cross(&world_up).normalize();
         let up = right.cross(&forward).normalize();
         (forward, right, up)
     }
 
-    fn update_target_from_angles(&mut self) {
-        let cp = self.pitch.cos();
-        let forward = Vector3::new(cp * self.yaw.cos(), self.pitch.sin(), cp * self.yaw.sin());
-        self.target = self.position + forward;
-    }
-
-    pub fn get_speed(&self) -> f32 {
-        self.speed
-    }
 
     pub fn move_view_relative(&mut self, input: Vector3<f32>, scale: f32) {
         if input == Vector3::new(0.0, 0.0, 0.0) {
@@ -82,32 +60,10 @@ impl Camera {
             WindowEvent::Key(key, _, Action::Press, _)
             | WindowEvent::Key(key, _, Action::Repeat, _) => {
                 self.pressed_keys.insert(*key);
+                // Movement effect is applied in update(); we'll mark dirty there if moved
             }
             WindowEvent::Key(key, _, Action::Release, _) => {
                 self.pressed_keys.remove(key);
-            }
-            WindowEvent::CursorPos(x, y) => {
-                if let Some((lx, ly)) = self.last_cursor_pos {
-                    let dx = (*x - lx) as f32;
-                    let dy = (*y - ly) as f32;
-                    self.yaw += dx * self.mouse_sensitivity;
-                    self.pitch -= dy * self.mouse_sensitivity;
-                    let limit = std::f32::consts::FRAC_PI_2 - 0.01;
-                    if self.pitch > limit {
-                        self.pitch = limit;
-                    }
-                    if self.pitch < -limit {
-                        self.pitch = -limit;
-                    }
-                    if self.yaw > std::f32::consts::PI {
-                        self.yaw -= 2.0 * std::f32::consts::PI;
-                    }
-                    if self.yaw < -std::f32::consts::PI {
-                        self.yaw += 2.0 * std::f32::consts::PI;
-                    }
-                    self.update_target_from_angles();
-                }
-                self.last_cursor_pos = Some((*x, *y));
             }
             _ => {}
         }
@@ -145,15 +101,55 @@ impl Camera {
             };
             let step = self.speed * speed_multiplier * dt;
             self.move_view_relative(input, step);
+            self.dirty = true;
+        }
+
+        // Arrow keys control yaw/pitch like mouse look
+        let mut rotated = false;
+        if self.pressed_keys.contains(&Key::Left) {
+            self.yaw -= self.rotation_speed * dt;
+            rotated = true;
+        }
+        if self.pressed_keys.contains(&Key::Right) {
+            self.yaw += self.rotation_speed * dt;
+            rotated = true;
+        }
+        if self.pressed_keys.contains(&Key::Up) {
+            self.pitch += self.rotation_speed * dt;
+            rotated = true;
+        }
+        if self.pressed_keys.contains(&Key::Down) {
+            self.pitch -= self.rotation_speed * dt;
+            rotated = true;
+        }
+        if rotated {
+            let limit = std::f32::consts::FRAC_PI_2 - 0.01;
+            if self.pitch > limit {
+                self.pitch = limit;
+            }
+            if self.pitch < -limit {
+                self.pitch = -limit;
+            }
+            if self.yaw > std::f32::consts::PI {
+                self.yaw -= 2.0 * std::f32::consts::PI;
+            }
+            if self.yaw < -std::f32::consts::PI {
+                self.yaw += 2.0 * std::f32::consts::PI;
+            }
+            self.dirty = true;
         }
 
         let _ = image_extent; // kept for signature compatibility
     }
 
-    pub fn get_uniform(&self, image_extent: Extent2D) -> CameraUniform {
+    pub fn destroy(&self) {}
+
+    pub fn view_projection(&self, image_extent: Extent2D) -> (Matrix4<f32>, Matrix4<f32>) {
+        let cos_pitch = self.pitch.cos();
+        let forward = Vector3::new(cos_pitch * self.yaw.cos(), self.pitch.sin(), cos_pitch * self.yaw.sin());
         let view = Matrix4::<f32>::look_at_rh(
             &self.position,
-            &self.target,
+            &(self.position + forward),
             &Vector3::<f32>::new(0.0, 1.0, 0.0),
         );
         let mut projection = Matrix4::<f32>::new_perspective(
@@ -163,8 +159,12 @@ impl Camera {
             100.0,
         );
         projection[(1, 1)] *= -1.0;
-        CameraUniform { view, projection }
+        (view, projection)
     }
 
-    pub fn destroy(&self) {}
+    pub fn take_dirty(&mut self) -> bool {
+        let was_dirty = self.dirty;
+        self.dirty = false;
+        was_dirty
+    }
 }

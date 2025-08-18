@@ -1,31 +1,29 @@
 use nalgebra::Vector3;
 
-use crate::{
-    core::gpu::model::Model,
-    vulkan_backend::{backend::VBackend, vertex_input::Vertex3D},
-};
+use crate::vulkan_backend::vertex_input::Vertex3D;
+use super::ModelBuilder;
 
 pub struct Plane;
 
-impl Plane {
-    pub fn geometry() -> (Vec<Vertex3D>, Vec<u32>) {
-        let color = Vector3::new(0.2, 0.7, 0.2);
+impl ModelBuilder for Plane {
+    fn geometry() -> (Vec<Vertex3D>, Vec<u32>) {
+        let color = Vector3::new(0.1, 0.1, 0.1);
 
         let vertices: Vec<Vertex3D> = vec![
             Vertex3D {
-                pos: Vector3::new(5.0, 0.0, 5.0),
+                pos: Vector3::new(10.0, 0.0, 10.0),
                 color,
             },
             Vertex3D {
-                pos: Vector3::new(5.0, 0.0, -5.0),
+                pos: Vector3::new(10.0, 0.0, -10.0),
                 color,
             },
             Vertex3D {
-                pos: Vector3::new(-5.0, 0.0, 5.0),
+                pos: Vector3::new(-10.0, 0.0, 10.0),
                 color,
             },
             Vertex3D {
-                pos: Vector3::new(-5.0, 0.0, -5.0),
+                pos: Vector3::new(-10.0, 0.0, -10.0),
                 color,
             },
         ];
@@ -37,10 +35,5 @@ impl Plane {
         ];
 
         (vertices, indices)
-    }
-
-    pub fn create_model(v_backend: &VBackend) -> Model {
-        let (vertices, indices) = Self::geometry();
-        Model::new(v_backend, &vertices, &indices)
     }
 }

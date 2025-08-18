@@ -1,49 +1,103 @@
 use crate::{
-    constants::MAX_FRAMES_IN_FLIGHT,
-    core::game_objects::camera::Camera,
-    core::gpu::{model::Model, resources::camera_gpu::CameraGpu},
-    core::rendering::{scene_render::SceneRender, recordable::{Drawable, Recordable}},
-    core::resources::primitives::{cube::Cube, plane::Plane},
+    core::{
+        game_objects::camera::Camera,
+        gpu::{
+            model::Model,
+            resources::{
+                global_uniform::{GlobalUniform, GlobalUniformObject},
+                image_texture::ImageTexture,
+            },
+        },
+        rendering::{
+            recordable::{Drawable, Recordable},
+            scene_render::SceneRender,
+        },
+    },
     vulkan_backend::{backend::VBackend, rendering::RecordContext},
 };
 use ash::vk;
 use glfw::WindowEvent;
+use nalgebra::Matrix4;
 
 pub struct Scene {
-    camera: Camera,
-    camera_gpu: CameraGpu,
+    camera: Option<Camera>,
+    global_uniform: GlobalUniform,
     models: Vec<Model>,
+    last_extent: Option<vk::Extent2D>,
 }
 
 impl Scene {
     pub fn new(v_backend: &VBackend, scene_render: &SceneRender) -> Self {
-        let layout = scene_render.get_descriptor_set_layout_at_binding(0);
+        // Initializing Global Uniform
+        let global_uniform_sets =
+            scene_render.get_global_uniform_descriptor_set(&v_backend.v_device);
+        let global_uniform = GlobalUniform::new(v_backend, global_uniform_sets);
+        global_uniform.bind_buffers(v_backend);
+        let mut scene = Self {
+            camera: None,
+            global_uniform,
+            models: Vec::new(),
+            last_extent: Some(v_backend.v_swapchain.image_extent),
+        };
+        let (view, projection) = (Matrix4::identity(), Matrix4::identity());
+        let uniform = GlobalUniformObject { view, projection };
+        scene.global_uniform.upload_all(&uniform);
 
-        let camera = Camera::new();
-        let camera_sets = scene_render.allocate_descriptor_sets(&v_backend.v_device, layout, MAX_FRAMES_IN_FLIGHT);
-        let camera_gpu = CameraGpu::new_with_sets(v_backend, camera_sets);
-        camera_gpu.bind_buffers(v_backend);
-        let models = vec![Plane::create_model(v_backend), Cube::create_model(v_backend)];
+        // Image Texture
+        let texture = ImageTexture::new(v_backend, "assets/textures/cracked-dirt512x512.jpg");
 
-        Self { camera, camera_gpu, models }
+        scene
     }
 
     pub fn handle_window_event(&mut self, event: &WindowEvent) {
-        self.camera.handle_window_event(event);
+        if let Some(camera) = &mut self.camera {
+            camera.handle_window_event(event);
+        }
     }
 
     pub fn update(&mut self, frame_index: usize, image_extent: vk::Extent2D, dt: f32) {
-        self.camera.update(frame_index, image_extent, dt);
-        let uniform = self.camera.get_uniform(image_extent);
-        self.camera_gpu.upload(frame_index, &uniform);
+        let extent_changed = match self.last_extent {
+            Some(prev) => prev.width != image_extent.width || prev.height != image_extent.height,
+            None => true,
+        };
+        if let Some(camera) = &mut self.camera {
+            camera.update(frame_index, image_extent, dt);
+            if extent_changed || camera.take_dirty() {
+                let (view, projection) = camera.view_projection(image_extent);
+                let uniform = GlobalUniformObject { view, projection };
+                self.global_uniform.upload(frame_index, &uniform);
+            }
+        }
+        self.last_extent = Some(image_extent);
     }
 
     pub fn destroy(&self, v_backend: &VBackend) {
-        self.camera.destroy();
-        self.camera_gpu.destroy(v_backend);
+        if let Some(camera) = &self.camera {
+            camera.destroy();
+        }
+        self.global_uniform.destroy(v_backend);
         for each in self.models.iter() {
             each.destroy(v_backend);
         }
+    }
+}
+
+impl Scene {
+    pub fn attach_camera(&mut self, camera: Camera) {
+        self.camera = Some(camera);
+        if let Some(extent) = self.last_extent {
+            if let Some(cam) = &self.camera {
+                let (view, projection) = cam.view_projection(extent);
+                let uniform = GlobalUniformObject { view, projection };
+                self.global_uniform.upload_all(&uniform);
+            }
+        }
+    }
+    pub fn detach_camera(&mut self) {
+        self.camera = None;
+    }
+    pub fn add_model(&mut self, model: Model) {
+        self.models.push(model);
     }
 }
 
@@ -55,7 +109,7 @@ impl Recordable for Scene {
                 vk::PipelineBindPoint::GRAPHICS,
                 ctx.pipeline_layout,
                 0,
-                &[self.camera_gpu.descriptor_set(ctx.frame_index)],
+                &[self.global_uniform.descriptor_set(ctx.frame_index)],
                 &[],
             );
 

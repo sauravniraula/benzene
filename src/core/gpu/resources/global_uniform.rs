@@ -1,22 +1,23 @@
 use ash::vk;
+use nalgebra::Matrix4;
 
 use crate::{
     constants::MAX_FRAMES_IN_FLIGHT,
-    core::game_objects::camera::CameraUniform,
-    vulkan_backend::{
-        backend::VBackend,
-        descriptor::VDescriptorSets,
-        memory::VUniformBuffer,
-    },
+    vulkan_backend::{backend::VBackend, descriptor::VDescriptorSets, memory::VUniformBuffer},
 };
 
-pub struct CameraGpu {
-    uniform_buffers: Vec<VUniformBuffer<CameraUniform>>,
-    descriptor_sets: VDescriptorSets,
+pub struct GlobalUniformObject {
+    pub view: Matrix4<f32>,
+    pub projection: Matrix4<f32>,
 }
 
-impl CameraGpu {
-    pub fn new_with_sets(v_backend: &VBackend, descriptor_sets: VDescriptorSets) -> Self {
+pub struct GlobalUniform {
+    uniform_buffers: Vec<VUniformBuffer<GlobalUniformObject>>,
+    sets: VDescriptorSets,
+}
+
+impl GlobalUniform {
+    pub fn new(v_backend: &VBackend, sets: VDescriptorSets) -> Self {
         let uniform_buffers: Vec<VUniformBuffer<_>> = (0..MAX_FRAMES_IN_FLIGHT)
             .map(|_| {
                 let mut u = VUniformBuffer::new(v_backend);
@@ -25,23 +26,31 @@ impl CameraGpu {
             })
             .collect();
 
-        let this = Self { uniform_buffers, descriptor_sets };
-        this
+        Self {
+            uniform_buffers,
+            sets,
+        }
     }
 
     pub fn bind_buffers(&self, v_backend: &VBackend) {
-        self.descriptor_sets.bind_all(
+        self.sets.bind_all(
             &v_backend.v_device,
             self.uniform_buffers.iter().map(|e| &e.v_buffer).collect(),
         );
     }
 
-    pub fn upload(&mut self, frame_index: usize, data: &CameraUniform) {
+    pub fn upload(&mut self, frame_index: usize, data: &GlobalUniformObject) {
         self.uniform_buffers[frame_index].copy(data);
     }
 
+    pub fn upload_all(&mut self, data: &GlobalUniformObject) {
+        for frame_index in 0..MAX_FRAMES_IN_FLIGHT {
+            self.upload(frame_index, data);
+        }
+    }
+
     pub fn descriptor_set(&self, frame_index: usize) -> vk::DescriptorSet {
-        self.descriptor_sets.sets[frame_index]
+        self.sets.sets[frame_index]
     }
 
     pub fn destroy(&self, v_backend: &VBackend) {
@@ -50,5 +59,3 @@ impl CameraGpu {
         }
     }
 }
-
-

@@ -6,5 +6,6 @@ edition = "2024"
 [dependencies]
 ash = { version = "0.38.0", features = ["linked"] }
 glfw = { version = "0.59.0", features = ["vulkan"] }
+image = "0.25.6"
 memoffset = "0.9.1"
 nalgebra = "0.34.0"

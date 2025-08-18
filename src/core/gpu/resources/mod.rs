@@ -1,3 +1,2 @@
-pub mod camera_gpu;
-
-
+pub mod global_uniform;
+pub mod image_texture;

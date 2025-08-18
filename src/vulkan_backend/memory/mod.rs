@@ -3,6 +3,7 @@ pub mod config;
 pub mod manager;
 pub mod buffer_state;
 pub mod uniform_buffer;
+pub mod image;
 
 pub use buffer::VBuffer;
 pub use config::{VAllocateMemoryConfig, VBufferConfig};
