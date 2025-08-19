@@ -5,7 +5,7 @@ use crate::{
     core::{
         gpu::model::Model,
         rendering::{recordable::Recordable, scene_render::SceneRender},
-        resources::{image::Image, primitives::ModelBuilder},
+        resources::primitives::ModelBuilder,
         scene::Scene,
     },
     vulkan_backend::{backend::VBackend, rendering::info::VRenderInfo},
@@ -48,10 +48,6 @@ impl GameEngine {
         B::create_model(&self.v_backend)
     }
 
-    pub fn get_image(&self, image_path: &str) -> Image {
-        Image::new(&self.v_backend, image_path)
-    }
-
     pub fn run(&mut self) {
         self.window.pwindow.set_key_polling(true);
         self.window
@@ -67,7 +63,11 @@ impl GameEngine {
 
             if let Some(scene) = &mut self.active_scene {
                 let frame_index = self.v_backend.v_renderer.frame_index.get();
-                scene.update(frame_index, self.v_backend.v_swapchain.image_extent, dt);
+                scene.update(
+                    frame_index,
+                    self.v_backend.v_swapchain.get_image_extent(),
+                    dt,
+                );
             }
 
             let render_result = self.v_backend.render(|info| self.render(&info));

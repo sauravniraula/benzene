@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
 use crate::vulkan_backend::{
-    backend::VBackend,
-    memory::{VBuffer, VBufferConfig, VMemoryState},
+    device::{VDevice, VPhysicalDevice},
+    memory::{VBuffer, VBufferConfig, VMemoryManager, VMemoryState},
 };
 use ash::vk;
 
@@ -12,14 +12,20 @@ pub struct VUniformBuffer<T> {
 }
 
 impl<T> VUniformBuffer<T> {
-    pub fn new(v_backend: &VBackend) -> Self {
+    pub fn new(
+        v_device: &VDevice,
+        v_physical_device: &VPhysicalDevice,
+        v_memory_manager: &VMemoryManager,
+    ) -> Self {
         let v_buffer = VBuffer::new(
-            v_backend,
+            v_device,
+            v_physical_device,
+            v_memory_manager,
             VBufferConfig {
                 size: size_of::<T>() as u64,
                 usage: vk::BufferUsageFlags::UNIFORM_BUFFER,
-                sharing_mode: v_backend.v_device.buffer_sharing_mode,
-                queue_families: Some(v_backend.v_device.buffer_queue_family_indices.clone()),
+                sharing_mode: v_device.buffer_sharing_mode,
+                queue_families: Some(v_device.buffer_queue_family_indices.clone()),
                 memory_property: vk::MemoryPropertyFlags::HOST_VISIBLE
                     | vk::MemoryPropertyFlags::HOST_COHERENT,
             },
@@ -40,8 +46,8 @@ impl<T> VUniformBuffer<T> {
         }
     }
 
-    pub fn destroy(&self, v_backend: &VBackend) {
-        self.v_buffer.destroy(v_backend);
+    pub fn destroy(&self, v_device: &VDevice, v_memory_manager: &VMemoryManager) {
+        self.v_buffer.destroy(v_device, v_memory_manager);
     }
 }
 

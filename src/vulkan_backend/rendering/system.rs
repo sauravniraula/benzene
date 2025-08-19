@@ -5,6 +5,7 @@ use crate::vulkan_backend::{
     rendering::{VRenderingSystemConfig, info::VRenderInfo},
     swapchain::VSwapchain,
 };
+use crate::vulkan_backend::memory::image::image_view::VImageView;
 use ash::vk::{self, Extent2D, Offset2D, Rect2D};
 
 pub struct VRenderingSystem {
@@ -30,7 +31,7 @@ impl VRenderingSystem {
 
         let attachment_1 = vk::AttachmentDescription::default()
             .samples(vk::SampleCountFlags::TYPE_1)
-            .format(v_swapchain.format)
+            .format(v_swapchain.images[0].config.format)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
 
@@ -52,7 +53,7 @@ impl VRenderingSystem {
             attachments_count as u32,
             render_pass,
             &v_swapchain.image_views,
-            v_swapchain.image_extent,
+            vk::Extent2D { width: v_swapchain.images[0].config.extent.width, height: v_swapchain.images[0].config.extent.height },
         );
 
         let mut pipeline_create_infos = Vec::new();
@@ -111,7 +112,7 @@ impl VRenderingSystem {
             pipelines,
             render_area: Rect2D {
                 offset: Offset2D { x: 0, y: 0 },
-                extent: v_swapchain.image_extent,
+                extent: vk::Extent2D { width: v_swapchain.images[0].config.extent.width, height: v_swapchain.images[0].config.extent.height },
             },
             framebuffers,
         }
@@ -121,14 +122,15 @@ impl VRenderingSystem {
         v_device: &VDevice,
         attachments_count: u32,
         render_pass: vk::RenderPass,
-        image_views: &Vec<vk::ImageView>,
+        image_views: &Vec<VImageView>,
         image_extent: Extent2D,
     ) -> Vec<vk::Framebuffer> {
         (0..image_views.len())
             .map(|i| {
+                let attachments = [image_views[i].image_view];
                 let info = vk::FramebufferCreateInfo::default()
                     .attachment_count(attachments_count)
-                    .attachments(&image_views[i..i + 1])
+                    .attachments(&attachments)
                     .render_pass(render_pass)
                     .width(image_extent.width)
                     .height(image_extent.height)
@@ -188,7 +190,7 @@ impl VRenderingSystem {
             VBackendEvent::UpdateFramebuffers(v_device, v_swapchain) => {
                 self.destroy_framebuffers(v_device);
 
-                let new_image_extent = v_swapchain.image_extent;
+                let new_image_extent = vk::Extent2D { width: v_swapchain.images[0].config.extent.width, height: v_swapchain.images[0].config.extent.height };
                 self.framebuffers = VRenderingSystem::create_framebuffers(
                     v_device,
                     self.attachments_count as u32,

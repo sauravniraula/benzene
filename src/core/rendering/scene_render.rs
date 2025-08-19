@@ -3,7 +3,13 @@ use ash::vk;
 use crate::vulkan_backend::{
     backend::VBackend,
     backend_event::VBackendEvent,
-    descriptor::{VDescriptorLayout, VDescriptorPool, VDescriptorSets},
+    descriptor::{
+        VDescriptorPool, VDescriptorSetLayout, VDescriptorSets,
+        config::{
+            VDescriptorBindingConfig, VDescriptorLayoutConfig, VDescriptorPoolConfig,
+            VDescriptorPoolSetConfig,
+        },
+    },
     device::VDevice,
     pipeline::{VPipelineInfo, VPipelineInfoConfig},
     rendering::{RecordContext, VRenderingSystem, VRenderingSystemConfig, info::VRenderInfo},
@@ -15,7 +21,7 @@ use crate::{constants::MAX_FRAMES_IN_FLIGHT, vulkan_backend::rendering::Recordab
 pub struct SceneRender {
     v_rendering_system: VRenderingSystem,
     pipeline_infos: Vec<VPipelineInfo>,
-    descriptor_layouts: Vec<VDescriptorLayout>,
+    descriptor_set_layouts: Vec<VDescriptorSetLayout>,
     descriptor_pool: VDescriptorPool,
 }
 
@@ -23,7 +29,26 @@ impl SceneRender {
     pub fn new(v_backend: &VBackend) -> Self {
         let vertex_binding_descriptions = Vertex3D::get_binding_descriptions();
         let vertex_attribute_descriptions = Vertex3D::get_attribute_descriptions();
-        let descriptor_layouts = vec![VDescriptorLayout::new(&v_backend.v_device)];
+        let single_set_layout = VDescriptorSetLayout::new(
+            &v_backend.v_device,
+            VDescriptorLayoutConfig {
+                bindings: vec![
+                    VDescriptorBindingConfig {
+                        binding: 0,
+                        count: 1,
+                        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                        shader_stage: vk::ShaderStageFlags::VERTEX,
+                    },
+                    VDescriptorBindingConfig {
+                        binding: 1,
+                        count: 1,
+                        descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                        shader_stage: vk::ShaderStageFlags::FRAGMENT,
+                    },
+                ],
+            },
+        );
+        let descriptor_set_layouts = [single_set_layout].into();
 
         let pipeline_infos = vec![VPipelineInfo::new(
             &v_backend.v_device,
@@ -33,7 +58,7 @@ impl SceneRender {
                 vertex_shader_file: "assets/shaders/shader.vert".into(),
                 fragment_shader_file: "assets/shaders/shader.frag".into(),
             },
-            &descriptor_layouts,
+            &descriptor_set_layouts,
         )];
 
         let v_rendering_system = VRenderingSystem::new(
@@ -44,21 +69,27 @@ impl SceneRender {
             },
         );
 
-        let descriptor_pool = VDescriptorPool::new(&v_backend.v_device, MAX_FRAMES_IN_FLIGHT);
+        let descriptor_pool_config = VDescriptorPoolConfig {
+            sets: vec![VDescriptorPoolSetConfig {
+                layout: descriptor_set_layouts[0].config.clone(),
+                count: MAX_FRAMES_IN_FLIGHT,
+            }],
+        };
+        let descriptor_pool = VDescriptorPool::new(&v_backend.v_device, &descriptor_pool_config);
 
         Self {
             v_rendering_system,
             pipeline_infos,
-            descriptor_layouts,
+            descriptor_set_layouts,
             descriptor_pool,
         }
     }
 
-    pub fn get_global_uniform_descriptor_set(&self, v_device: &VDevice) -> VDescriptorSets {
+    pub fn get_descriptor_set(&self, v_device: &VDevice) -> VDescriptorSets {
         VDescriptorSets::new(
             v_device,
             &self.descriptor_pool,
-            &self.descriptor_layouts[0],
+            &self.descriptor_set_layouts[0],
             MAX_FRAMES_IN_FLIGHT,
         )
     }
@@ -73,13 +104,14 @@ impl SceneRender {
             )
         };
 
+        let ctx = RecordContext {
+            v_device,
+            cmd: info.command_buffer,
+            frame_index: info.frame_index,
+            pipeline_layout: self.pipeline_infos[0].layout,
+        };
+
         for recordable in recordables.iter() {
-            let ctx = RecordContext {
-                v_device,
-                cmd: info.command_buffer,
-                frame_index: info.frame_index,
-                pipeline_layout: self.pipeline_infos[0].layout,
-            };
             recordable.record(&ctx);
         }
 
@@ -94,7 +126,7 @@ impl SceneRender {
         for each in self.pipeline_infos.iter() {
             each.destroy(v_device);
         }
-        for each in self.descriptor_layouts.iter() {
+        for each in self.descriptor_set_layouts.iter() {
             each.destroy(v_device);
         }
         self.descriptor_pool.destroy(v_device);

@@ -3,7 +3,11 @@ use nalgebra::Matrix4;
 
 use crate::{
     constants::MAX_FRAMES_IN_FLIGHT,
-    vulkan_backend::{backend::VBackend, descriptor::VDescriptorSets, memory::VUniformBuffer},
+    vulkan_backend::{
+        backend::VBackend,
+        descriptor::{VDescriptorSets, VDescriptorWriteBatch},
+        memory::VUniformBuffer,
+    },
 };
 
 pub struct GlobalUniformObject {
@@ -13,29 +17,40 @@ pub struct GlobalUniformObject {
 
 pub struct GlobalUniform {
     uniform_buffers: Vec<VUniformBuffer<GlobalUniformObject>>,
-    sets: VDescriptorSets,
 }
 
 impl GlobalUniform {
-    pub fn new(v_backend: &VBackend, sets: VDescriptorSets) -> Self {
+    pub fn new(v_backend: &VBackend) -> Self {
         let uniform_buffers: Vec<VUniformBuffer<_>> = (0..MAX_FRAMES_IN_FLIGHT)
             .map(|_| {
-                let mut u = VUniformBuffer::new(v_backend);
-                u.v_buffer.map_memory(v_backend);
+                let mut u = VUniformBuffer::new(
+                    &v_backend.v_device,
+                    &v_backend.v_physical_device,
+                    &v_backend.v_memory_manager,
+                );
+                u.v_buffer
+                    .map_memory(&v_backend.v_device, &v_backend.v_memory_manager);
                 u
             })
             .collect();
 
-        Self {
-            uniform_buffers,
-            sets,
-        }
+        Self { uniform_buffers }
     }
 
-    pub fn bind_buffers(&self, v_backend: &VBackend) {
-        self.sets.bind_all(
-            &v_backend.v_device,
-            self.uniform_buffers.iter().map(|e| &e.v_buffer).collect(),
+    pub fn queue_descriptor_writes(
+        &self,
+        sets: &VDescriptorSets,
+        batch: &mut VDescriptorWriteBatch,
+    ) {
+        sets.queue_buffer_all(
+            batch,
+            0,
+            vk::DescriptorType::UNIFORM_BUFFER,
+            &self
+                .uniform_buffers
+                .iter()
+                .map(|e| &e.v_buffer)
+                .collect::<Vec<_>>(),
         );
     }
 
@@ -49,13 +64,9 @@ impl GlobalUniform {
         }
     }
 
-    pub fn descriptor_set(&self, frame_index: usize) -> vk::DescriptorSet {
-        self.sets.sets[frame_index]
-    }
-
     pub fn destroy(&self, v_backend: &VBackend) {
         for each in self.uniform_buffers.iter() {
-            each.destroy(v_backend);
+            each.destroy(&v_backend.v_device, &v_backend.v_memory_manager);
         }
     }
 }

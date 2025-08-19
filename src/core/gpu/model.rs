@@ -17,7 +17,9 @@ pub struct Model {
 impl Model {
 	pub fn new(v_backend: &VBackend, vertices: &[Vertex3D], indices: &[u32]) -> Self {
 		let v_buffer = VBuffer::new(
-			v_backend,
+			&v_backend.v_device,
+			&v_backend.v_physical_device,
+			&v_backend.v_memory_manager,
 			VBufferConfig {
 				size: (size_of::<Vertex3D>() * vertices.len()) as u64,
 				usage: vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
@@ -27,10 +29,12 @@ impl Model {
 			},
 		);
 		let vertices_data_ptr = vertices.as_ptr() as *const u8;
-		v_buffer.copy_to_buffer(v_backend, vertices_data_ptr, v_buffer.config.size);
+		v_buffer.copy_to_buffer(&v_backend.v_device, &v_backend.v_physical_device, &v_backend.v_memory_manager, vertices_data_ptr, v_buffer.config.size);
 
 		let i_buffer = VBuffer::new(
-			v_backend,
+			&v_backend.v_device,
+			&v_backend.v_physical_device,
+			&v_backend.v_memory_manager,
 			VBufferConfig {
 				size: (size_of::<u32>() * indices.len()) as u64,
 				usage: vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
@@ -40,14 +44,14 @@ impl Model {
 			},
 		);
 		let indices_data_ptr = indices.as_ptr() as *const u8;
-		i_buffer.copy_to_buffer(v_backend, indices_data_ptr, i_buffer.config.size);
+		i_buffer.copy_to_buffer(&v_backend.v_device, &v_backend.v_physical_device, &v_backend.v_memory_manager, indices_data_ptr, i_buffer.config.size);
 
 		Self { v_buffer, i_buffer, index_count: indices.len() as u32 }
 	}
 
 	pub fn destroy(&self, v_backend: &VBackend) {
-		self.i_buffer.destroy(v_backend);
-		self.v_buffer.destroy(v_backend);
+		self.i_buffer.destroy(&v_backend.v_device, &v_backend.v_memory_manager);
+		self.v_buffer.destroy(&v_backend.v_device, &v_backend.v_memory_manager);
 	}
 }
 

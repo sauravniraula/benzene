@@ -1,38 +1,38 @@
-use nalgebra::Vector3;
+use nalgebra::{Vector2, Vector3};
 
-use crate::vulkan_backend::vertex_input::Vertex3D;
 use super::ModelBuilder;
+use crate::vulkan_backend::vertex_input::Vertex3D;
 
 pub struct Plane;
 
 impl ModelBuilder for Plane {
     fn geometry() -> (Vec<Vertex3D>, Vec<u32>) {
-        let color = Vector3::new(0.1, 0.1, 0.1);
+        let color = Vector3::new(1.0, 1.0, 1.0);
 
         let vertices: Vec<Vertex3D> = vec![
             Vertex3D {
-                pos: Vector3::new(10.0, 0.0, 10.0),
+                pos: Vector2::new(-0.5, -0.5),
                 color,
+                tex_coord: Vector2::<f32>::new(0.0, 0.0),
             },
             Vertex3D {
-                pos: Vector3::new(10.0, 0.0, -10.0),
+                pos: Vector2::new(0.5, -0.5),
                 color,
+                tex_coord: Vector2::<f32>::new(1.0, 0.0),
             },
             Vertex3D {
-                pos: Vector3::new(-10.0, 0.0, 10.0),
+                pos: Vector2::new(0.5, 0.5),
                 color,
+                tex_coord: Vector2::<f32>::new(0.0, 1.0),
             },
             Vertex3D {
-                pos: Vector3::new(-10.0, 0.0, -10.0),
+                pos: Vector2::new(-0.5, 0.5),
                 color,
+                tex_coord: Vector2::<f32>::new(1.0, 1.0),
             },
         ];
 
-        // Two-sided by duplicating with flipped winding to keep BACK culling
-        let indices: Vec<u32> = vec![
-            0, 1, 2, 3, 2, 1, // top face (CCW when seen from above)
-            2, 1, 0, 1, 2, 3, // bottom face (CCW when seen from below)
-        ];
+        let indices: Vec<u32> = vec![0, 1, 2, 2, 3, 0];
 
         (vertices, indices)
     }

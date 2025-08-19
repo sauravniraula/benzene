@@ -4,40 +4,62 @@ use crate::{
         gpu::{
             model::Model,
             resources::global_uniform::{GlobalUniform, GlobalUniformObject},
+            resources::texture::ImageTexture,
         },
         rendering::{
             recordable::{Drawable, Recordable},
             scene_render::SceneRender,
         },
-        resources::image::Image,
     },
-    vulkan_backend::{backend::VBackend, rendering::RecordContext},
+    vulkan_backend::{
+        backend::VBackend,
+        descriptor::{VDescriptorSets, VDescriptorWriteBatch},
+        rendering::RecordContext,
+    },
 };
 use ash::vk;
 use glfw::WindowEvent;
 use nalgebra::Matrix4;
 
 pub struct Scene {
+    // Descriptor Sets
+    single_sets: VDescriptorSets,
+
     camera: Option<Camera>,
     global_uniform: GlobalUniform,
     models: Vec<Model>,
-    images: Vec<Image>,
+    texture: ImageTexture,
     last_extent: Option<vk::Extent2D>,
 }
 
 impl Scene {
     pub fn new(v_backend: &VBackend, scene_render: &SceneRender) -> Self {
-        // Initializing Global Uniform
-        let global_uniform_sets =
-            scene_render.get_global_uniform_descriptor_set(&v_backend.v_device);
-        let global_uniform = GlobalUniform::new(v_backend, global_uniform_sets);
-        global_uniform.bind_buffers(v_backend);
+        let single_sets = scene_render.get_descriptor_set(&v_backend.v_device);
+        let global_uniform = GlobalUniform::new(v_backend);
+
+        let texture = ImageTexture::new(
+            v_backend,
+            "assets/textures/cracked-dirt512x512.jpg",
+            vk::Format::R8G8B8A8_SRGB,
+        );
+        {
+            let mut batch = VDescriptorWriteBatch::new();
+            global_uniform.queue_descriptor_writes(&single_sets, &mut batch);
+            texture.queue_descriptor_writes(&single_sets, &mut batch);
+
+            batch.flush(&v_backend.v_device);
+        }
+
         let mut scene = Self {
+            single_sets,
             camera: None,
             global_uniform,
             models: Vec::new(),
-            images: Vec::new(),
-            last_extent: Some(v_backend.v_swapchain.image_extent),
+            texture,
+            last_extent: Some(vk::Extent2D {
+                width: v_backend.v_swapchain.images[0].config.extent.width,
+                height: v_backend.v_swapchain.images[0].config.extent.height,
+            }),
         };
         let (view, projection) = (Matrix4::identity(), Matrix4::identity());
         let uniform = GlobalUniformObject { view, projection };
@@ -73,12 +95,10 @@ impl Scene {
             camera.destroy();
         }
         self.global_uniform.destroy(v_backend);
-        for each in self.images.iter() {
-            each.destroy(v_backend);
-        }
         for each in self.models.iter() {
             each.destroy(v_backend);
         }
+        self.texture.destroy(v_backend);
     }
 }
 
@@ -99,9 +119,6 @@ impl Scene {
     pub fn add_model(&mut self, model: Model) {
         self.models.push(model);
     }
-    pub fn add_image(&mut self, image: Image) {
-        self.images.push(image);
-    }
 }
 
 impl Recordable for Scene {
@@ -112,7 +129,7 @@ impl Recordable for Scene {
                 vk::PipelineBindPoint::GRAPHICS,
                 ctx.pipeline_layout,
                 0,
-                &[self.global_uniform.descriptor_set(ctx.frame_index)],
+                &[self.single_sets.sets[ctx.frame_index]],
                 &[],
             );
 

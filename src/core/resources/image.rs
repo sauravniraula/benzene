@@ -2,11 +2,11 @@ use ash::vk::{self, Extent3D};
 
 use crate::vulkan_backend::{
     backend::VBackend,
-    memory::{config::VImageConfig, image::VImage},
+    memory::image::{config::VImageConfig, VImage},
 };
 
 pub struct Image {
-    v_image: VImage,
+    pub v_image: VImage,
 }
 
 impl Image {
@@ -21,23 +21,26 @@ impl Image {
         let image_size = image_extent.width as u64 * image_extent.height as u64 * 4;
 
         let v_image = VImage::new(
-            v_backend,
-            VImageConfig {
-                extent: image_extent,
-                size: image_size,
-                usage: vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
-                sharing_mode: v_backend.v_device.buffer_sharing_mode,
-                queue_families: Some(v_backend.v_device.buffer_queue_family_indices.clone()),
-                memory_property: vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            },
+            &v_backend.v_device,
+            &v_backend.v_physical_device,
+            &v_backend.v_memory_manager,
+            VImageConfig::color_2d(
+                image_extent,
+                image_size,
+                vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
+                v_backend.v_device.buffer_sharing_mode,
+                Some(v_backend.v_device.buffer_queue_family_indices.clone()),
+                vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                vk::Format::R8G8B8A8_SRGB,
+            ),
         );
 
-        v_image.copy_to_image(v_backend, image_rgba.as_ptr(), image_size);
+        v_image.copy_to_image(&v_backend.v_device, &v_backend.v_physical_device, &v_backend.v_memory_manager, image_rgba.as_ptr(), image_size);
 
         Self { v_image }
     }
 
     pub fn destroy(&self, v_backend: &VBackend) {
-        self.v_image.destroy(v_backend);
+        self.v_image.destroy(&v_backend.v_device, &v_backend.v_memory_manager);
     }
 }

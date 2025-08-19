@@ -1,18 +1,19 @@
+use crate::vulkan_backend::memory::image::config::VImageConfig;
+use crate::vulkan_backend::memory::image::{VImage, image_view::VImageView};
 use crate::{
     vulkan_backend::{device::VPhysicalDevice, instance::VInstance, surface::VSurface},
     window::Window,
 };
-use ash::{khr, vk};
+use ash::{
+    khr,
+    vk::{self, Extent2D},
+};
 
 pub struct VSwapchain {
     pub swapchain_device: khr::swapchain::Device,
     pub swapchain: vk::SwapchainKHR,
-    pub image_count: u32,
-    pub image_extent: vk::Extent2D,
-    pub format: vk::Format,
-    pub images: Vec<vk::Image>,
-    pub image_views: Vec<vk::ImageView>,
-    pub subresource_range: vk::ImageSubresourceRange,
+    pub images: Vec<VImage>,
+    pub image_views: Vec<VImageView>,
 }
 
 impl VSwapchain {
@@ -63,37 +64,55 @@ impl VSwapchain {
                 .expect("failed to get swapchain images")
         };
 
-        let subresource_range = vk::ImageSubresourceRange::default()
-            .aspect_mask(vk::ImageAspectFlags::COLOR)
-            .level_count(1)
-            .layer_count(1);
-
-        let image_views: Vec<vk::ImageView> = images
+        let v_images: Vec<VImage> = images
             .iter()
-            .map(|image| unsafe {
-                let create_info = vk::ImageViewCreateInfo::default()
-                    .image(*image)
-                    .subresource_range(subresource_range)
-                    .view_type(vk::ImageViewType::TYPE_2D)
-                    .format(surface_format.format);
-
-                v_device
-                    .device
-                    .create_image_view(&create_info, None)
-                    .expect("failed to create image view")
+            .map(|&img| {
+                VImage::from_external(
+                    img,
+                    VImageConfig::external_color_2d(
+                        vk::Extent3D {
+                            width: image_extent.width,
+                            height: image_extent.height,
+                            depth: 1,
+                        },
+                        vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST,
+                        if v_device.is_graphics_and_present_queue_same {
+                            vk::SharingMode::EXCLUSIVE
+                        } else {
+                            vk::SharingMode::CONCURRENT
+                        },
+                        if v_device.is_graphics_and_present_queue_same {
+                            None
+                        } else {
+                            Some(vec![
+                                v_device.graphics_queue_family_index,
+                                v_device.present_queue_family_index,
+                            ])
+                        },
+                        surface_format.format,
+                    ),
+                )
             })
+            .collect();
+
+        let image_views: Vec<VImageView> = v_images
+            .iter()
+            .map(|v_image| VImageView::new_2d_color(v_device, v_image.image, surface_format.format))
             .collect();
 
         Self {
             swapchain_device,
             swapchain,
-            image_count,
-            image_extent,
-            format: surface_format.format,
-            images,
+            images: v_images,
             image_views,
-            subresource_range,
         }
+    }
+
+    pub fn get_image_extent(&self) -> Extent2D {
+        return Extent2D {
+            width: self.images[0].config.extent.width,
+            height: self.images[0].config.extent.height,
+        };
     }
 
     pub fn select_image_extent(
@@ -125,8 +144,8 @@ impl VSwapchain {
 
     pub fn destroy(&self, v_device: &super::device::VDevice) {
         unsafe {
-            for &image_view in self.image_views.iter() {
-                v_device.device.destroy_image_view(image_view, None);
+            for v_image_view in self.image_views.iter() {
+                v_image_view.destroy(v_device);
             }
             self.swapchain_device
                 .destroy_swapchain(self.swapchain, None);

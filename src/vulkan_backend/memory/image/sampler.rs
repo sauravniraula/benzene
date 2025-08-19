@@ -1,13 +1,13 @@
 use ash::vk;
 
-use crate::vulkan_backend::backend::VBackend;
+use crate::vulkan_backend::device::{VDevice, VPhysicalDevice};
 
 pub struct VSampler {
-    sampler: vk::Sampler,
+    pub sampler: vk::Sampler,
 }
 
 impl VSampler {
-    pub fn new(v_backend: &VBackend) -> Self {
+    pub fn new(v_device: &VDevice, v_physical_device: &VPhysicalDevice) -> Self {
         let sampler_info = vk::SamplerCreateInfo::default()
             .mag_filter(vk::Filter::LINEAR)
             .min_filter(vk::Filter::LINEAR)
@@ -16,8 +16,7 @@ impl VSampler {
             .address_mode_w(vk::SamplerAddressMode::REPEAT)
             .anisotropy_enable(true)
             .max_anisotropy(
-                v_backend
-                    .v_physical_device
+                v_physical_device
                     .properties
                     .limits
                     .max_sampler_anisotropy,
@@ -32,8 +31,7 @@ impl VSampler {
             .max_lod(0.0);
 
         let sampler = unsafe {
-            v_backend
-                .v_device
+            v_device
                 .device
                 .create_sampler(&sampler_info, None)
                 .expect("failed to create sampler")
@@ -42,12 +40,7 @@ impl VSampler {
         Self { sampler }
     }
 
-    pub fn destroy(&self, v_backend: &VBackend) {
-        unsafe {
-            v_backend
-                .v_device
-                .device
-                .destroy_sampler(self.sampler, None)
-        };
+    pub fn destroy(&self, v_device: &VDevice) {
+        unsafe { v_device.device.destroy_sampler(self.sampler, None) };
     }
 }

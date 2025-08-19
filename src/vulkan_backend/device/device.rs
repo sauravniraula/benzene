@@ -68,9 +68,13 @@ impl VDevice {
             .iter()
             .map(|each| CString::new(each.as_str()).unwrap().into_raw() as *const i8)
             .collect();
+        let mut enabled_features = vk::PhysicalDeviceFeatures::default();
+        enabled_features.sampler_anisotropy = vk::TRUE;
+
         let device_info = vk::DeviceCreateInfo::default()
             .queue_create_infos(&queue_infos)
-            .enabled_extension_names(&p_extenstions);
+            .enabled_extension_names(&p_extenstions)
+            .enabled_features(&enabled_features);
 
         let device = unsafe {
             v_instance

@@ -14,7 +14,7 @@ pub struct Camera {
 
 impl Camera {
     pub fn new() -> Self {
-        let position = Point3::<f32>::new(-5.0, 5.0, -5.0);
+        let position = Point3::<f32>::new(2.0, 2.0, 2.0);
         let look_at = Point3::<f32>::new(0.0, 0.0, 0.0);
         let forward = (look_at - position).normalize();
         let yaw: f32 = forward.z.atan2(forward.x);
@@ -39,12 +39,15 @@ impl Camera {
     fn basis_vectors(&self) -> (Vector3<f32>, Vector3<f32>, Vector3<f32>) {
         let world_up = Vector3::new(0.0, 1.0, 0.0);
         let cos_pitch = self.pitch.cos();
-        let forward = Vector3::new(cos_pitch * self.yaw.cos(), self.pitch.sin(), cos_pitch * self.yaw.sin());
+        let forward = Vector3::new(
+            cos_pitch * self.yaw.cos(),
+            self.pitch.sin(),
+            cos_pitch * self.yaw.sin(),
+        );
         let right = forward.cross(&world_up).normalize();
         let up = right.cross(&forward).normalize();
         (forward, right, up)
     }
-
 
     pub fn move_view_relative(&mut self, input: Vector3<f32>, scale: f32) {
         if input == Vector3::new(0.0, 0.0, 0.0) {
@@ -146,17 +149,21 @@ impl Camera {
 
     pub fn view_projection(&self, image_extent: Extent2D) -> (Matrix4<f32>, Matrix4<f32>) {
         let cos_pitch = self.pitch.cos();
-        let forward = Vector3::new(cos_pitch * self.yaw.cos(), self.pitch.sin(), cos_pitch * self.yaw.sin());
+        let forward = Vector3::new(
+            cos_pitch * self.yaw.cos(),
+            self.pitch.sin(),
+            cos_pitch * self.yaw.sin(),
+        );
         let view = Matrix4::<f32>::look_at_rh(
             &self.position,
             &(self.position + forward),
-            &Vector3::<f32>::new(0.0, 1.0, 0.0),
+            &Vector3::<f32>::new(0.0, 0.0, 1.0),
         );
         let mut projection = Matrix4::<f32>::new_perspective(
             (image_extent.width as f32) / (image_extent.height as f32),
             45_f32.to_radians(),
             0.1,
-            100.0,
+            10.0,
         );
         projection[(1, 1)] *= -1.0;
         (view, projection)

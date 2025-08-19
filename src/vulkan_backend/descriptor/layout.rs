@@ -1,20 +1,25 @@
 use ash::vk;
 
-use crate::vulkan_backend::device::VDevice;
+use crate::vulkan_backend::{descriptor::config::{VDescriptorLayoutConfig, VDescriptorBindingConfig}, device::VDevice};
 
-pub struct VDescriptorLayout {
+pub struct VDescriptorSetLayout {
     pub layout: vk::DescriptorSetLayout,
-    pub binding: u32,
-    pub count: u32,
+    pub config: VDescriptorLayoutConfig,
 }
 
-impl VDescriptorLayout {
-    pub fn new(v_device: &VDevice) -> Self {
-        let layout_bindings = [vk::DescriptorSetLayoutBinding::default()
-            .binding(0)
-            .descriptor_count(1)
-            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-            .stage_flags(vk::ShaderStageFlags::VERTEX)];
+impl VDescriptorSetLayout {
+    pub fn new(v_device: &VDevice, config: VDescriptorLayoutConfig) -> Self {
+        let layout_bindings: Vec<vk::DescriptorSetLayoutBinding> = config
+            .bindings
+            .iter()
+            .map(|b: &VDescriptorBindingConfig| {
+                vk::DescriptorSetLayoutBinding::default()
+                    .binding(b.binding)
+                    .descriptor_count(b.count)
+                    .descriptor_type(b.descriptor_type)
+                    .stage_flags(b.shader_stage)
+            })
+            .collect();
 
         let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&layout_bindings);
 
@@ -25,11 +30,7 @@ impl VDescriptorLayout {
                 .expect("failed to create descriptor set layout")
         };
 
-        Self {
-            layout,
-            binding: 0,
-            count: 1,
-        }
+        Self { layout, config }
     }
 
     pub fn destroy(&self, v_device: &VDevice) {

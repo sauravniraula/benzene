@@ -1,8 +1,8 @@
 use ash::vk;
 
 use crate::vulkan_backend::{
-    backend::VBackend,
-    memory::{VBufferConfig, VMemory, VMemoryState},
+    device::{VDevice, VPhysicalDevice},
+    memory::{VBufferConfig, VMemory, VMemoryManager, VMemoryState},
 };
 
 pub struct VBuffer {
@@ -13,7 +13,12 @@ pub struct VBuffer {
 }
 
 impl VBuffer {
-    pub fn new(v_backend: &VBackend, config: VBufferConfig) -> Self {
+    pub fn new(
+        v_device: &VDevice,
+        v_physical_device: &VPhysicalDevice,
+        v_memory_manager: &VMemoryManager,
+        config: VBufferConfig,
+    ) -> Self {
         assert!(
             config.sharing_mode != vk::SharingMode::CONCURRENT || config.queue_families.is_some(),
             "Queue families must be provided on CONCURRENT Sharing Mode"
@@ -30,25 +35,24 @@ impl VBuffer {
         }
 
         let buffer = unsafe {
-            v_backend
-                .v_device
+            v_device
                 .device
                 .create_buffer(&buffer_info, None)
                 .expect("failed to create buffer")
         };
 
-        let memory_requirements = unsafe {
-            v_backend
-                .v_device
-                .device
-                .get_buffer_memory_requirements(buffer)
-        };
+        let memory_requirements = unsafe { v_device.device.get_buffer_memory_requirements(buffer) };
 
-        let v_memory = VMemory::new(v_backend, &memory_requirements, config.memory_property);
+        let v_memory = VMemory::new(
+            v_memory_manager,
+            v_physical_device,
+            v_device,
+            &memory_requirements,
+            config.memory_property,
+        );
 
         unsafe {
-            v_backend
-                .v_device
+            v_device
                 .device
                 .bind_buffer_memory(buffer, v_memory.memory, 0)
                 .expect("failed to bind buffer memory")
@@ -62,12 +66,16 @@ impl VBuffer {
         }
     }
 
-    pub fn map_memory(&mut self, v_backend: &VBackend) -> VMemoryState {
-        self.v_memory.map(v_backend, self.config.size)
+    pub fn map_memory(
+        &mut self,
+        v_device: &VDevice,
+        v_memory_manager: &VMemoryManager,
+    ) -> VMemoryState {
+        self.v_memory.map(v_device, v_memory_manager, self.config.size)
     }
 
-    pub fn unmap_memory(&mut self, v_backend: &VBackend) -> VMemoryState {
-        self.v_memory.unmap(v_backend)
+    pub fn unmap_memory(&mut self, v_device: &VDevice, v_memory_manager: &VMemoryManager) -> VMemoryState {
+        self.v_memory.unmap(v_device, v_memory_manager)
     }
 
     pub fn is_host_visible(&self) -> bool {
@@ -76,18 +84,22 @@ impl VBuffer {
             .contains(vk::MemoryPropertyFlags::HOST_VISIBLE)
     }
 
-    pub fn copy_to_buffer(&self, v_backend: &VBackend, data: *const u8, size: u64) {
+    pub fn copy_to_buffer(
+        &self,
+        v_device: &VDevice,
+        v_physical_device: &VPhysicalDevice,
+        v_memory_manager: &VMemoryManager,
+        data: *const u8,
+        size: u64,
+    ) {
         if self.is_host_visible() {
-            v_backend.v_memory_manager.copy_data_to_memory(
-                &v_backend.v_device,
-                self.v_memory.memory,
-                data,
-                size,
-            );
+            v_memory_manager.copy_data_to_memory(v_device, self.v_memory.memory, data, size);
             return;
         }
         let staging_buffer = VBuffer::new(
-            v_backend,
+            v_device,
+            v_physical_device,
+            v_memory_manager,
             VBufferConfig {
                 size: size,
                 usage: vk::BufferUsageFlags::TRANSFER_SRC,
@@ -97,27 +109,22 @@ impl VBuffer {
                     | vk::MemoryPropertyFlags::HOST_COHERENT,
             },
         );
-        staging_buffer.copy_to_buffer(v_backend, data, size);
-        v_backend
-            .v_memory_manager
-            .run_single_cmd_submit(&v_backend.v_device, false, |cmd| {
-                let copy_regions = [vk::BufferCopy::default().size(size)];
-                unsafe {
-                    v_backend.v_device.device.cmd_copy_buffer(
-                        cmd,
-                        staging_buffer.buffer,
-                        self.buffer,
-                        &copy_regions,
-                    );
-                }
-            });
-        staging_buffer.destroy(v_backend);
+        staging_buffer.copy_to_buffer(v_device, v_physical_device, v_memory_manager, data, size);
+        v_memory_manager.run_single_cmd_submit(v_device, false, |cmd| {
+            let copy_regions = [vk::BufferCopy::default().size(size)];
+            unsafe {
+                v_device
+                    .device
+                    .cmd_copy_buffer(cmd, staging_buffer.buffer, self.buffer, &copy_regions);
+            }
+        });
+        staging_buffer.destroy(v_device, v_memory_manager);
     }
 
-    pub fn destroy(&self, v_backend: &VBackend) {
-        self.v_memory.free(v_backend);
+    pub fn destroy(&self, v_device: &VDevice, v_memory_manager: &VMemoryManager) {
+        self.v_memory.free(v_device, v_memory_manager);
         unsafe {
-            v_backend.v_device.device.destroy_buffer(self.buffer, None);
+            v_device.device.destroy_buffer(self.buffer, None);
         }
     }
 }

@@ -1,7 +1,7 @@
 use super::VPipelineInfoConfig;
 use crate::{
-    vulkan_backend::{descriptor::VDescriptorLayout, device::VDevice},
     shared::load_file_as_vec_u32,
+    vulkan_backend::{descriptor::VDescriptorSetLayout, device::VDevice},
 };
 use ash::vk;
 
@@ -17,7 +17,7 @@ impl VPipelineInfo {
     pub fn new(
         v_device: &VDevice,
         config: VPipelineInfoConfig,
-        descriptor_layouts: &Vec<VDescriptorLayout>,
+        descriptor_set_layouts: &Vec<VDescriptorSetLayout>,
     ) -> Self {
         let mut vert_shader_byte_code_path = config.vertex_shader_file.clone();
         vert_shader_byte_code_path.push_str(".spv");
@@ -45,8 +45,10 @@ impl VPipelineInfo {
                 .expect("failed to create fragment shader module")
         };
 
-        let descriptor_set_layouts: Vec<vk::DescriptorSetLayout> =
-            descriptor_layouts.iter().map(|each| each.layout).collect();
+        let descriptor_set_layouts: Vec<vk::DescriptorSetLayout> = descriptor_set_layouts
+            .iter()
+            .map(|each| each.layout)
+            .collect();
 
         let layout_info =
             vk::PipelineLayoutCreateInfo::default().set_layouts(&descriptor_set_layouts);
@@ -100,8 +102,9 @@ impl VPipelineInfo {
     pub fn get_rasterization_stage(&self) -> vk::PipelineRasterizationStateCreateInfo {
         vk::PipelineRasterizationStateCreateInfo::default()
             .line_width(1.0)
-            .cull_mode(vk::CullModeFlags::BACK)
-            .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
+            // .cull_mode(vk::CullModeFlags::BACK)
+            // .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
+            .cull_mode(vk::CullModeFlags::NONE)
     }
 
     pub fn get_multisampling_stage(&self) -> vk::PipelineMultisampleStateCreateInfo {
