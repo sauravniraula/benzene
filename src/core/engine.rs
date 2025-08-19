@@ -5,7 +5,7 @@ use crate::{
     core::{
         gpu::model::Model,
         rendering::{recordable::Recordable, scene_render::SceneRender},
-        resources::primitives::ModelBuilder,
+        resources::{image::Image, primitives::ModelBuilder},
         scene::Scene,
     },
     vulkan_backend::{backend::VBackend, rendering::info::VRenderInfo},
@@ -46,6 +46,10 @@ impl GameEngine {
 
     pub fn build_model<B: ModelBuilder>(&self) -> Model {
         B::create_model(&self.v_backend)
+    }
+
+    pub fn get_image(&self, image_path: &str) -> Image {
+        Image::new(&self.v_backend, image_path)
     }
 
     pub fn run(&mut self) {

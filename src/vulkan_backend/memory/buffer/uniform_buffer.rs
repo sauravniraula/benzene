@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::vulkan_backend::{
     backend::VBackend,
-    memory::{VBuffer, VBufferConfig, VBufferState},
+    memory::{VBuffer, VBufferConfig, VMemoryState},
 };
 use ash::vk;
 
@@ -32,7 +32,7 @@ impl<T> VUniformBuffer<T> {
     }
 
     pub fn copy(&self, data: &T) {
-        if let VBufferState::MAPPED(address) = self.v_buffer.state {
+        if let VMemoryState::MAPPED(address) = self.v_buffer.v_memory.state {
             unsafe {
                 let src = data as *const T as *const u8;
                 std::ptr::copy_nonoverlapping(src, address, size_of::<T>());
@@ -44,3 +44,5 @@ impl<T> VUniformBuffer<T> {
         self.v_buffer.destroy(v_backend);
     }
 }
+
+

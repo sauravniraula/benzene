@@ -21,6 +21,7 @@ pub struct Scene {
     camera: Option<Camera>,
     global_uniform: GlobalUniform,
     models: Vec<Model>,
+    images: Vec<Image>,
     last_extent: Option<vk::Extent2D>,
 }
 
@@ -35,14 +36,12 @@ impl Scene {
             camera: None,
             global_uniform,
             models: Vec::new(),
+            images: Vec::new(),
             last_extent: Some(v_backend.v_swapchain.image_extent),
         };
         let (view, projection) = (Matrix4::identity(), Matrix4::identity());
         let uniform = GlobalUniformObject { view, projection };
         scene.global_uniform.upload_all(&uniform);
-
-        // Image Texture
-        let texture = Image::new(v_backend, "assets/textures/cracked-dirt512x512.jpg");
 
         scene
     }
@@ -74,6 +73,9 @@ impl Scene {
             camera.destroy();
         }
         self.global_uniform.destroy(v_backend);
+        for each in self.images.iter() {
+            each.destroy(v_backend);
+        }
         for each in self.models.iter() {
             each.destroy(v_backend);
         }
@@ -96,6 +98,9 @@ impl Scene {
     }
     pub fn add_model(&mut self, model: Model) {
         self.models.push(model);
+    }
+    pub fn add_image(&mut self, image: Image) {
+        self.images.push(image);
     }
 }
 

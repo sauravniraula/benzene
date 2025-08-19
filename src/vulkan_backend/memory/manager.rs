@@ -1,17 +1,15 @@
 use ash::vk;
 
-use crate::vulkan_backend::{
-    device::{VDevice, VPhysicalDevice},
-    memory::VBuffer,
-};
+use crate::vulkan_backend::device::{VDevice, VPhysicalDevice};
 
 pub struct VMemoryManager {
-    command_pool: vk::CommandPool,
+    transfer_command_pool: vk::CommandPool,
+    graphics_command_pool: vk::CommandPool,
 }
 
 impl VMemoryManager {
     pub fn new(v_device: &VDevice) -> Self {
-        let command_pool = unsafe {
+        let transfer_command_pool = unsafe {
             v_device
                 .device
                 .create_command_pool(
@@ -21,8 +19,21 @@ impl VMemoryManager {
                 )
                 .expect("failed to create command pool for VMemoryManager")
         };
+        let graphics_command_pool = unsafe {
+            v_device
+                .device
+                .create_command_pool(
+                    &vk::CommandPoolCreateInfo::default()
+                        .queue_family_index(v_device.graphics_queue_family_index),
+                    None,
+                )
+                .expect("failed to create command pool for VMemoryManager")
+        };
 
-        Self { command_pool }
+        Self {
+            transfer_command_pool,
+            graphics_command_pool,
+        }
     }
 
     pub fn allocate_memory(
@@ -73,9 +84,26 @@ impl VMemoryManager {
         };
     }
 
-    pub fn run_single_cmd_submit(&self, v_device: &VDevice, func: impl Fn(vk::CommandBuffer) -> ()) {
+    pub fn run_single_cmd_submit(
+        &self,
+        v_device: &VDevice,
+        graphics: bool,
+        func: impl Fn(vk::CommandBuffer) -> (),
+    ) {
+        let pool = if graphics {
+            self.graphics_command_pool
+        } else {
+            self.transfer_command_pool
+        };
+
+        let queue = if graphics {
+            v_device.graphics_queue
+        } else {
+            v_device.transfer_queue
+        };
+
         let alloc_info = vk::CommandBufferAllocateInfo::default()
-            .command_pool(self.command_pool)
+            .command_pool(pool)
             .command_buffer_count(1);
         unsafe {
             let command_buffers = v_device
@@ -102,15 +130,13 @@ impl VMemoryManager {
             let submit_infos = [vk::SubmitInfo::default().command_buffers(&command_buffers)];
             v_device
                 .device
-                .queue_submit(v_device.transfer_queue, &submit_infos, vk::Fence::null())
+                .queue_submit(queue, &submit_infos, vk::Fence::null())
                 .expect("failed to submit command buffer on VMemoryManager");
             v_device
                 .device
-                .queue_wait_idle(v_device.transfer_queue)
+                .queue_wait_idle(queue)
                 .expect("failed to wait transfer queue to be idle");
-            v_device
-                .device
-                .free_command_buffers(self.command_pool, &command_buffers);
+            v_device.device.free_command_buffers(pool, &command_buffers);
         };
     }
 
@@ -124,7 +150,10 @@ impl VMemoryManager {
         unsafe {
             v_device
                 .device
-                .destroy_command_pool(self.command_pool, None)
-        };
+                .destroy_command_pool(self.transfer_command_pool, None);
+            v_device
+                .device
+                .destroy_command_pool(self.graphics_command_pool, None);
+        }
     }
 }
