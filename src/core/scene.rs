@@ -56,10 +56,7 @@ impl Scene {
             global_uniform,
             models: Vec::new(),
             texture,
-            last_extent: Some(vk::Extent2D {
-                width: v_backend.v_swapchain.v_images[0].config.extent.width,
-                height: v_backend.v_swapchain.v_images[0].config.extent.height,
-            }),
+            last_extent: Some(v_backend.v_swapchain.image_extent),
         };
         let (view, projection) = (Matrix4::identity(), Matrix4::identity());
         let uniform = GlobalUniformObject { view, projection };
@@ -84,7 +81,7 @@ impl Scene {
             if extent_changed || camera.take_dirty() {
                 let (view, projection) = camera.view_projection(image_extent);
                 let uniform = GlobalUniformObject { view, projection };
-                self.global_uniform.upload(frame_index, &uniform);
+                self.global_uniform.upload_all(&uniform);
             }
         }
         self.last_extent = Some(image_extent);
