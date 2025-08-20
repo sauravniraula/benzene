@@ -1,13 +1,15 @@
-use benzene::core::{
-    GameEngine, game_objects::camera::Camera, resources::primitives::plane::Plane,
-};
+use benzene::core::{GameEngine, camera::Camera, primitives::plane::Plane};
 
 fn main() {
     let mut game_engine = GameEngine::new();
 
     let mut scene = game_engine.create_scene();
     scene.attach_camera(Camera::new());
-    scene.add_model(game_engine.build_model::<Plane>());
+
+    // let torus_model = game_engine.get_model_from_obj("assets/models/torus-flat.obj");
+    // scene.add_model(torus_model);
+    let plane_model = game_engine.build_model::<Plane>();
+    scene.add_model(plane_model);
 
     game_engine.set_active_scene(scene);
 

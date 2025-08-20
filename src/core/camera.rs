@@ -14,7 +14,7 @@ pub struct Camera {
 
 impl Camera {
     pub fn new() -> Self {
-        let position = Point3::<f32>::new(20.0, 20.0, 20.0);
+        let position = Point3::<f32>::new(0.0, 0.0, 7.0);
         let look_at = Point3::<f32>::new(0.0, 0.0, 0.0);
         let forward = (look_at - position).normalize();
         let yaw: f32 = forward.z.atan2(forward.x);
@@ -72,7 +72,7 @@ impl Camera {
         }
     }
 
-    pub fn update(&mut self, _frame_index: usize, image_extent: Extent2D, dt: f32) {
+    pub fn update(&mut self, image_extent: Extent2D, dt: f32) {
         // Build input vector from currently pressed keys
         let mut input = Vector3::new(0.0, 0.0, 0.0);
         if self.pressed_keys.contains(&Key::A) {

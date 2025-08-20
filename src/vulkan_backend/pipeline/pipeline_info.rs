@@ -103,7 +103,7 @@ impl VPipelineInfo {
         vk::PipelineRasterizationStateCreateInfo::default()
             .line_width(1.0)
             .cull_mode(vk::CullModeFlags::BACK)
-            .front_face(vk::FrontFace::CLOCKWISE)
+            .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
     }
 
     pub fn get_depth_stencil_stage(&self) -> vk::PipelineDepthStencilStateCreateInfo {

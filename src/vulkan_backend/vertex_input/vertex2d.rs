@@ -1,11 +1,10 @@
 use crate::vulkan_backend::vertex_input::BindableVertexInput;
 use ash::vk;
 use memoffset::offset_of;
-use nalgebra::{Vector2, Vector3};
 
 pub struct Vertex2D {
-    pub pos: Vector2<f32>,
-    pub color: Vector3<f32>,
+    pub pos: [f32; 2],
+    pub color: [f32; 3],
 }
 
 impl BindableVertexInput for Vertex2D {
@@ -26,8 +25,8 @@ impl BindableVertexInput for Vertex2D {
                 .offset(0),
             vk::VertexInputAttributeDescription::default()
                 .binding(0)
-                .location(1)
-                .format(vk::Format::R32G32B32_SFLOAT)
+                .location(0)
+                .format(vk::Format::R32G32_SFLOAT)
                 .offset(offset_of!(Vertex2D, color) as u32),
         ]
         .into()

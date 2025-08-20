@@ -3,9 +3,8 @@ use std::time::Instant;
 
 use crate::{
     core::{
-        gpu::model::Model,
-        rendering::{recordable::Recordable, scene_render::SceneRender},
-        resources::primitives::ModelBuilder,
+        ModelBuilder,
+        gpu::{model::Model, recordable::Recordable, scene_render::SceneRender},
         scene::Scene,
     },
     vulkan_backend::{backend::VBackend, rendering::info::VRenderInfo},
@@ -48,39 +47,24 @@ impl GameEngine {
         B::create_model(&self.v_backend)
     }
 
+    pub fn get_model_from_obj(&self, obj_path: &str) -> Model {
+        Model::from_obj(&self.v_backend, obj_path)
+    }
+
     pub fn run(&mut self) {
         self.window.pwindow.set_key_polling(true);
         self.window
             .pwindow
             .set_cursor_mode(glfw::CursorMode::Normal);
         while !self.window.pwindow.should_close() {
-            let now = Instant::now();
-            let dt = (now - self.last_frame_instant).as_secs_f32();
-            self.last_frame_instant = now;
-
             self.window.glfwi.poll_events();
             self.handle_window_events();
-
-            if let Some(scene) = &mut self.active_scene {
-                let frame_index = self.v_backend.v_renderer.frame_index.get();
-                scene.update(
-                    frame_index,
-                    self.v_backend.v_swapchain.image_extent,
-                    dt,
-                );
-            }
-
-            let render_result = self.v_backend.render(|info| self.render(&info));
-            if let Some(event) = self
-                .v_backend
-                .check_render_issues(&self.window, render_result)
-            {
-                self.scene_render.handle_backend_event(&event);
-            }
+            self.update();
+            self.render();
         }
     }
 
-    pub fn handle_window_events(&mut self) {
+    fn handle_window_events(&mut self) {
         let window_messages: Vec<(f64, WindowEvent)> =
             glfw::flush_messages(&self.window.receiver).collect();
         for (_, event) in window_messages {
@@ -96,7 +80,31 @@ impl GameEngine {
         }
     }
 
-    fn render(&self, info: &VRenderInfo) {
+    fn update(&mut self) {
+        let current_instant = Instant::now();
+        let dt = current_instant.duration_since(self.last_frame_instant);
+        self.last_frame_instant = current_instant;
+
+        // Update the scene
+        if let Some(scene) = &mut self.active_scene {
+            scene.update(self.v_backend.v_swapchain.image_extent, dt.as_secs_f32());
+        }
+    }
+
+    fn render(&mut self) {
+        // render
+        let render_result = self.v_backend.render(|info| self.render_scene(&info));
+
+        // check render result
+        if let Some(event) = self
+            .v_backend
+            .check_render_issues(&self.window, render_result)
+        {
+            self.scene_render.handle_backend_event(&event);
+        }
+    }
+
+    fn render_scene(&self, info: &VRenderInfo) {
         if let Some(scene) = &self.active_scene {
             let recordables: [&dyn Recordable; 1] = [scene];
             self.scene_render

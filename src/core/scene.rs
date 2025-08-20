@@ -1,20 +1,17 @@
 use crate::{
     core::{
-        game_objects::camera::Camera,
+        camera::Camera,
         gpu::{
+            global_uniform::{GlobalUniform, GlobalUniformObject},
             model::Model,
-            resources::global_uniform::{GlobalUniform, GlobalUniformObject},
-            resources::texture::ImageTexture,
-        },
-        rendering::{
-            recordable::{Drawable, Recordable},
+            recordable::{Drawable, RecordContext, Recordable},
             scene_render::SceneRender,
+            texture::ImageTexture,
         },
     },
     vulkan_backend::{
         backend::VBackend,
         descriptor::{VDescriptorSets, VDescriptorWriteBatch},
-        rendering::RecordContext,
     },
 };
 use ash::vk;
@@ -71,13 +68,13 @@ impl Scene {
         }
     }
 
-    pub fn update(&mut self, frame_index: usize, image_extent: vk::Extent2D, dt: f32) {
+    pub fn update(&mut self, image_extent: vk::Extent2D, dt: f32) {
         let extent_changed = match self.last_extent {
             Some(prev) => prev.width != image_extent.width || prev.height != image_extent.height,
             None => true,
         };
         if let Some(camera) = &mut self.camera {
-            camera.update(frame_index, image_extent, dt);
+            camera.update(image_extent, dt);
             if extent_changed || camera.take_dirty() {
                 let (view, projection) = camera.view_projection(image_extent);
                 let uniform = GlobalUniformObject { view, projection };

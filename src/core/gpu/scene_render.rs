@@ -1,22 +1,20 @@
 use ash::vk;
 
-use crate::vulkan_backend::{
+use crate::{constants::MAX_FRAMES_IN_FLIGHT, core::gpu::recordable::{RecordContext, Recordable}, vulkan_backend::{
     backend::VBackend,
     backend_event::VBackendEvent,
     descriptor::{
-        VDescriptorPool, VDescriptorSetLayout, VDescriptorSets,
         config::{
             VDescriptorBindingConfig, VDescriptorLayoutConfig, VDescriptorPoolConfig,
             VDescriptorPoolSetConfig,
-        },
+        }, VDescriptorPool, VDescriptorSetLayout, VDescriptorSets
     },
     device::VDevice,
     pipeline::{VPipelineInfo, VPipelineInfoConfig},
-    rendering::{RecordContext, VRenderingSystem, VRenderingSystemConfig, info::VRenderInfo},
+    rendering::{ info::VRenderInfo, VRenderingSystem, VRenderingSystemConfig},
     vertex_input::{BindableVertexInput, Vertex3D},
-};
+}};
 
-use crate::{constants::MAX_FRAMES_IN_FLIGHT, vulkan_backend::rendering::Recordable};
 
 pub struct SceneRender {
     v_rendering_system: VRenderingSystem,
@@ -37,7 +35,7 @@ impl SceneRender {
                         binding: 0,
                         count: 1,
                         descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                        shader_stage: vk::ShaderStageFlags::VERTEX,
+                        shader_stage: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                     },
                     VDescriptorBindingConfig {
                         binding: 1,
