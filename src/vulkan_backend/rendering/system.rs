@@ -1,3 +1,4 @@
+use crate::vulkan_backend::memory::image::image_view::VImageView;
 use crate::vulkan_backend::{
     backend_event::VBackendEvent,
     device::VDevice,
@@ -5,7 +6,6 @@ use crate::vulkan_backend::{
     rendering::{VRenderingSystemConfig, info::VRenderInfo},
     swapchain::VSwapchain,
 };
-use crate::vulkan_backend::memory::image::image_view::VImageView;
 use ash::vk::{self, Extent2D, Offset2D, Rect2D};
 
 pub struct VRenderingSystem {
@@ -22,24 +22,55 @@ impl VRenderingSystem {
         v_swapchain: &VSwapchain,
         config: VRenderingSystemConfig,
     ) -> Self {
-        let attachment_ref_1 = vk::AttachmentReference::default()
+        let color_attachment_ref = vk::AttachmentReference::default()
             .attachment(0)
             .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
-        let attachment_refs = [attachment_ref_1];
-        let subpass_1 = vk::SubpassDescription::default().color_attachments(&attachment_refs);
+        let depth_attachment_ref = vk::AttachmentReference::default()
+            .attachment(1)
+            .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        let subpass_1 = vk::SubpassDescription::default()
+            .color_attachments(std::slice::from_ref(&color_attachment_ref))
+            .depth_stencil_attachment(&depth_attachment_ref);
+
         let subpasses = [subpass_1];
 
-        let attachment_1 = vk::AttachmentDescription::default()
+        let color_attachment = vk::AttachmentDescription::default()
             .samples(vk::SampleCountFlags::TYPE_1)
-            .format(v_swapchain.images[0].config.format)
+            .format(v_swapchain.v_images[0].config.format)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
 
-        let attachments = [attachment_1];
+        let depth_attachment = vk::AttachmentDescription::default()
+            .format(v_swapchain.depth_format)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+        let attachments = [color_attachment, depth_attachment];
         let attachments_count = attachments.len();
+
+        // let subpass_dependency = vk::SubpassDependency::default()
+        //     .src_stage_mask(
+        //         vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+        //             | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
+        //     )
+        //     .dst_stage_mask(
+        //         vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+        //             | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+        //     )
+        //     .src_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
+        //     .dst_access_mask(
+        //         vk::AccessFlags::COLOR_ATTACHMENT_WRITE
+        //             | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+        //     );
+
         let render_pass_info = vk::RenderPassCreateInfo::default()
             .subpasses(&subpasses)
             .attachments(&attachments);
+            // .dependencies(std::slice::from_ref(&subpass_dependency));
 
         let render_pass = unsafe {
             v_device
@@ -52,8 +83,9 @@ impl VRenderingSystem {
             v_device,
             attachments_count as u32,
             render_pass,
-            &v_swapchain.image_views,
-            vk::Extent2D { width: v_swapchain.images[0].config.extent.width, height: v_swapchain.images[0].config.extent.height },
+            &v_swapchain.v_image_views,
+            &v_swapchain.depth_v_image_view,
+            v_swapchain.image_extent,
         );
 
         let mut pipeline_create_infos = Vec::new();
@@ -62,6 +94,7 @@ impl VRenderingSystem {
         let mut input_assembly_states = Vec::new();
         let mut shader_stages = Vec::new();
         let mut rasterization_stages = Vec::new();
+        let mut depth_stencil_stages = Vec::new();
         let mut multisampling_stages = Vec::new();
         let mut color_blend_stages = Vec::new();
         let mut dynamic_states = Vec::new();
@@ -72,6 +105,7 @@ impl VRenderingSystem {
             input_assembly_states.push(info.get_input_assembly_stage());
             shader_stages.push(info.get_shader_stages());
             rasterization_stages.push(info.get_rasterization_stage());
+            depth_stencil_stages.push(info.get_depth_stencil_stage());
             multisampling_stages.push(info.get_multisampling_stage());
             color_blend_stages.push(info.get_color_blend_stage());
             dynamic_states.push(info.get_dynamic_state());
@@ -85,6 +119,7 @@ impl VRenderingSystem {
                 .input_assembly_state(&input_assembly_states[i])
                 .stages(&shader_stages[i])
                 .rasterization_state(&rasterization_stages[i])
+                .depth_stencil_state(&depth_stencil_stages[i])
                 .multisample_state(&multisampling_stages[i])
                 .color_blend_state(&color_blend_stages[i])
                 .dynamic_state(&dynamic_states[i])
@@ -112,7 +147,10 @@ impl VRenderingSystem {
             pipelines,
             render_area: Rect2D {
                 offset: Offset2D { x: 0, y: 0 },
-                extent: vk::Extent2D { width: v_swapchain.images[0].config.extent.width, height: v_swapchain.images[0].config.extent.height },
+                extent: vk::Extent2D {
+                    width: v_swapchain.v_images[0].config.extent.width,
+                    height: v_swapchain.v_images[0].config.extent.height,
+                },
             },
             framebuffers,
         }
@@ -123,11 +161,12 @@ impl VRenderingSystem {
         attachments_count: u32,
         render_pass: vk::RenderPass,
         image_views: &Vec<VImageView>,
+        depth_image_view: &VImageView,
         image_extent: Extent2D,
     ) -> Vec<vk::Framebuffer> {
         (0..image_views.len())
             .map(|i| {
-                let attachments = [image_views[i].image_view];
+                let attachments = [image_views[i].image_view, depth_image_view.image_view];
                 let info = vk::FramebufferCreateInfo::default()
                     .attachment_count(attachments_count)
                     .attachments(&attachments)
@@ -146,9 +185,13 @@ impl VRenderingSystem {
     }
 
     pub fn start(&self, v_device: &VDevice, info: &VRenderInfo) {
-        let mut clear_values = [vk::ClearValue::default()];
+        let mut clear_values = [vk::ClearValue::default(), vk::ClearValue::default()];
         clear_values[0].color = vk::ClearColorValue {
             float32: [0.0, 0.0, 0.0, 1.0],
+        };
+        clear_values[1].depth_stencil = vk::ClearDepthStencilValue {
+            depth: 1.0,
+            stencil: 0,
         };
         let begin_info = vk::RenderPassBeginInfo::default()
             .render_pass(self.render_pass)
@@ -190,17 +233,17 @@ impl VRenderingSystem {
             VBackendEvent::UpdateFramebuffers(v_device, v_swapchain) => {
                 self.destroy_framebuffers(v_device);
 
-                let new_image_extent = vk::Extent2D { width: v_swapchain.images[0].config.extent.width, height: v_swapchain.images[0].config.extent.height };
                 self.framebuffers = VRenderingSystem::create_framebuffers(
                     v_device,
                     self.attachments_count as u32,
                     self.render_pass,
-                    &v_swapchain.image_views,
-                    new_image_extent,
+                    &v_swapchain.v_image_views,
+                    &v_swapchain.depth_v_image_view,
+                    v_swapchain.image_extent,
                 );
                 self.render_area = Rect2D {
                     offset: self.render_area.offset,
-                    extent: new_image_extent,
+                    extent: v_swapchain.image_extent,
                 }
             }
             _ => {}

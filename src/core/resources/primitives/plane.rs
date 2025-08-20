@@ -11,28 +11,48 @@ impl ModelBuilder for Plane {
 
         let vertices: Vec<Vertex3D> = vec![
             Vertex3D {
-                pos: Vector2::new(-0.5, -0.5),
+                pos: Vector3::new(-10.0, 0.0, -10.0),
                 color,
                 tex_coord: Vector2::<f32>::new(0.0, 0.0),
             },
             Vertex3D {
-                pos: Vector2::new(0.5, -0.5),
-                color,
-                tex_coord: Vector2::<f32>::new(1.0, 0.0),
-            },
-            Vertex3D {
-                pos: Vector2::new(0.5, 0.5),
+                pos: Vector3::new(10.0, 0.0, -10.0),
                 color,
                 tex_coord: Vector2::<f32>::new(0.0, 1.0),
             },
             Vertex3D {
-                pos: Vector2::new(-0.5, 0.5),
+                pos: Vector3::new(10.0, 0.0, 10.0),
                 color,
                 tex_coord: Vector2::<f32>::new(1.0, 1.0),
             },
+            Vertex3D {
+                pos: Vector3::new(-10.0, 0.0, 10.0),
+                color,
+                tex_coord: Vector2::<f32>::new(1.0, 0.0),
+            },
+            Vertex3D {
+                pos: Vector3::new(-10.0, 10.0, -10.0),
+                color,
+                tex_coord: Vector2::<f32>::new(0.0, 0.0),
+            },
+            Vertex3D {
+                pos: Vector3::new(10.0, 10.0, -10.0),
+                color,
+                tex_coord: Vector2::<f32>::new(0.0, 1.0),
+            },
+            Vertex3D {
+                pos: Vector3::new(10.0, 10.0, 10.0),
+                color,
+                tex_coord: Vector2::<f32>::new(1.0, 1.0),
+            },
+            Vertex3D {
+                pos: Vector3::new(-10.0, 10.0, 10.0),
+                color,
+                tex_coord: Vector2::<f32>::new(1.0, 0.0),
+            },
         ];
 
-        let indices: Vec<u32> = vec![0, 1, 2, 2, 3, 0];
+        let indices: Vec<u32> = vec![0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4];
 
         (vertices, indices)
     }

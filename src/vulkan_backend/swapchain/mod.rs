@@ -1,19 +1,22 @@
+use crate::vulkan_backend::device::VDevice;
+use crate::vulkan_backend::memory::VMemoryManager;
 use crate::vulkan_backend::memory::image::config::VImageConfig;
 use crate::vulkan_backend::memory::image::{VImage, image_view::VImageView};
 use crate::{
     vulkan_backend::{device::VPhysicalDevice, instance::VInstance, surface::VSurface},
     window::Window,
 };
-use ash::{
-    khr,
-    vk::{self, Extent2D},
-};
+use ash::{khr, vk};
 
 pub struct VSwapchain {
     pub swapchain_device: khr::swapchain::Device,
     pub swapchain: vk::SwapchainKHR,
-    pub images: Vec<VImage>,
-    pub image_views: Vec<VImageView>,
+    pub image_extent: vk::Extent2D,
+    pub v_images: Vec<VImage>,
+    pub v_image_views: Vec<VImageView>,
+    pub depth_v_image: VImage,
+    pub depth_v_image_view: VImageView,
+    pub depth_format: vk::Format,
 }
 
 impl VSwapchain {
@@ -22,7 +25,8 @@ impl VSwapchain {
         v_instance: &VInstance,
         v_surface: &VSurface,
         v_physical_device: &VPhysicalDevice,
-        v_device: &super::device::VDevice,
+        v_device: &VDevice,
+        v_memory_manager: &VMemoryManager,
     ) -> Self {
         let swapchain_device = khr::swapchain::Device::new(&v_instance.instance, &v_device.device);
 
@@ -64,55 +68,86 @@ impl VSwapchain {
                 .expect("failed to get swapchain images")
         };
 
+        let extent_3d = vk::Extent3D {
+            width: image_extent.width,
+            height: image_extent.height,
+            depth: 1,
+        };
+        let sharing_mode = if v_device.is_graphics_and_present_queue_same {
+            vk::SharingMode::EXCLUSIVE
+        } else {
+            vk::SharingMode::CONCURRENT
+        };
+        let queue_family_indices = if v_device.is_graphics_and_present_queue_same {
+            None
+        } else {
+            Some(vec![
+                v_device.graphics_queue_family_index,
+                v_device.present_queue_family_index,
+            ])
+        };
+
         let v_images: Vec<VImage> = images
             .iter()
             .map(|&img| {
                 VImage::from_external(
                     img,
-                    VImageConfig::external_color_2d(
-                        vk::Extent3D {
-                            width: image_extent.width,
-                            height: image_extent.height,
-                            depth: 1,
-                        },
+                    VImageConfig::external_2d(
+                        extent_3d,
                         vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST,
-                        if v_device.is_graphics_and_present_queue_same {
-                            vk::SharingMode::EXCLUSIVE
-                        } else {
-                            vk::SharingMode::CONCURRENT
-                        },
-                        if v_device.is_graphics_and_present_queue_same {
-                            None
-                        } else {
-                            Some(vec![
-                                v_device.graphics_queue_family_index,
-                                v_device.present_queue_family_index,
-                            ])
-                        },
+                        sharing_mode,
+                        queue_family_indices.clone(),
                         surface_format.format,
                     ),
                 )
             })
             .collect();
 
-        let image_views: Vec<VImageView> = v_images
+        let v_image_views: Vec<VImageView> = v_images
             .iter()
-            .map(|v_image| VImageView::new_2d_color(v_device, v_image.image, surface_format.format))
+            .map(|v_image| {
+                VImageView::new_2d(
+                    v_device,
+                    &v_image,
+                    vk::ImageAspectFlags::COLOR,
+                    surface_format.format,
+                )
+            })
             .collect();
+
+        let depth_format = v_physical_device.get_format_for_depth_stencil(v_instance);
+
+        let depth_v_image = VImage::new(
+            v_device,
+            v_physical_device,
+            v_memory_manager,
+            VImageConfig::image_2d(
+                extent_3d,
+                image_extent.height as u64 * image_extent.width as u64 * 4,
+                vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+                sharing_mode,
+                queue_family_indices,
+                vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                depth_format,
+            ),
+        );
+        let depth_v_image_view = VImageView::new_2d(
+            v_device,
+            &depth_v_image,
+            vk::ImageAspectFlags::DEPTH,
+            depth_format,
+        );
 
         Self {
             swapchain_device,
             swapchain,
-            images: v_images,
-            image_views,
+            image_extent,
+            v_images,
+            v_image_views,
+            depth_v_image,
+            depth_v_image_view,
+            depth_format,
         }
-    }
-
-    pub fn get_image_extent(&self) -> Extent2D {
-        return Extent2D {
-            width: self.images[0].config.extent.width,
-            height: self.images[0].config.extent.height,
-        };
     }
 
     pub fn select_image_extent(
@@ -142,9 +177,11 @@ impl VSwapchain {
         image_count
     }
 
-    pub fn destroy(&self, v_device: &super::device::VDevice) {
+    pub fn destroy(&self, v_device: &VDevice, v_memory_manager: &VMemoryManager) {
         unsafe {
-            for v_image_view in self.image_views.iter() {
+            self.depth_v_image_view.destroy(v_device);
+            self.depth_v_image.destroy(v_device, v_memory_manager);
+            for v_image_view in self.v_image_views.iter() {
                 v_image_view.destroy(v_device);
             }
             self.swapchain_device

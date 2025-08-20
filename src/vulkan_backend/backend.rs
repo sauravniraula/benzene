@@ -46,6 +46,7 @@ impl VBackend {
             &v_surface,
             &v_physical_device,
             &v_device,
+            &v_memory_manager,
         );
         let v_renderer = VRenderer::new(&v_device, MAX_FRAMES_IN_FLIGHT);
 
@@ -62,21 +63,30 @@ impl VBackend {
 
     pub fn recreate_swapchain(&mut self, window: &Window) {
         self.v_device.wait_till_idle();
-        self.v_swapchain.destroy(&self.v_device);
+        self.v_swapchain
+            .destroy(&self.v_device, &self.v_memory_manager);
         self.v_swapchain = VSwapchain::new(
             window,
             &self.v_instance,
             &self.v_surface,
             &self.v_physical_device,
             &self.v_device,
+            &self.v_memory_manager,
         );
     }
 
-    pub fn check_render_issues<'a>(&'a mut self, window: &Window, result: VRenderResult) -> Option<VBackendEvent<'a>> {
+    pub fn check_render_issues<'a>(
+        &'a mut self,
+        window: &Window,
+        result: VRenderResult,
+    ) -> Option<VBackendEvent<'a>> {
         match result {
             VRenderResult::RecreateSwapchain => {
                 self.recreate_swapchain(window);
-                Some(VBackendEvent::UpdateFramebuffers(&self.v_device, &self.v_swapchain))
+                Some(VBackendEvent::UpdateFramebuffers(
+                    &self.v_device,
+                    &self.v_swapchain,
+                ))
             }
             _ => None,
         }
@@ -89,7 +99,8 @@ impl VBackend {
 
     pub fn destroy(&self) {
         self.v_renderer.destroy(&self.v_device);
-        self.v_swapchain.destroy(&self.v_device);
+        self.v_swapchain
+            .destroy(&self.v_device, &self.v_memory_manager);
         self.v_memory_manager.destroy(&self.v_device);
         self.v_device.destroy();
         self.v_surface.destroy();

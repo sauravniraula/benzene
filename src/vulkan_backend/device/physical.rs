@@ -1,6 +1,8 @@
 use ash::vk;
 
-use crate::vulkan_backend::{device::config::VPhysicalDeviceConfig, instance::VInstance, surface::VSurface};
+use crate::vulkan_backend::{
+    device::config::VPhysicalDeviceConfig, instance::VInstance, surface::VSurface,
+};
 
 pub struct VPhysicalDevice {
     pub physical_device: vk::PhysicalDevice,
@@ -66,6 +68,46 @@ impl VPhysicalDevice {
             }
         }
         return self.surface_formats[0];
+    }
+
+    pub fn get_format_for_depth_stencil(&self, v_instance: &VInstance) -> vk::Format {
+        return self.get_format_with_support(
+            v_instance,
+            vec![
+                vk::Format::D32_SFLOAT,
+                vk::Format::D32_SFLOAT_S8_UINT,
+                vk::Format::D24_UNORM_S8_UINT,
+            ],
+            vk::ImageTiling::OPTIMAL,
+            vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
+        );
+    }
+
+    pub fn get_format_with_support(
+        &self,
+        v_instance: &VInstance,
+        formats: Vec<vk::Format>,
+        tiling: vk::ImageTiling,
+        features: vk::FormatFeatureFlags,
+    ) -> vk::Format {
+        for each_format in formats {
+            let format_props = unsafe {
+                v_instance
+                    .instance
+                    .get_physical_device_format_properties(self.physical_device, each_format)
+            };
+            if tiling == vk::ImageTiling::LINEAR
+                && format_props.linear_tiling_features.contains(features)
+            {
+                return each_format;
+            }
+            if tiling == vk::ImageTiling::OPTIMAL
+                && format_props.optimal_tiling_features.contains(features)
+            {
+                return each_format;
+            }
+        }
+        panic!("failed to find format with support")
     }
 
     pub fn select_present_mode(&self) -> vk::PresentModeKHR {

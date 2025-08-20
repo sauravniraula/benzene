@@ -4,7 +4,7 @@ use memoffset::offset_of;
 use nalgebra::{Vector2, Vector3};
 
 pub struct Vertex3D {
-    pub pos: Vector2<f32>,
+    pub pos: Vector3<f32>,
     pub color: Vector3<f32>,
     pub tex_coord: Vector2<f32>,
 }
@@ -24,7 +24,7 @@ impl BindableVertexInput for Vertex3D {
                 .binding(0)
                 .location(0)
                 .format(vk::Format::R32G32B32_SFLOAT)
-                .offset(0),
+                .offset(offset_of!(Vertex3D, pos) as u32),
             vk::VertexInputAttributeDescription::default()
                 .binding(0)
                 .location(1)

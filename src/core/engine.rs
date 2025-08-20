@@ -65,7 +65,7 @@ impl GameEngine {
                 let frame_index = self.v_backend.v_renderer.frame_index.get();
                 scene.update(
                     frame_index,
-                    self.v_backend.v_swapchain.get_image_extent(),
+                    self.v_backend.v_swapchain.image_extent,
                     dt,
                 );
             }

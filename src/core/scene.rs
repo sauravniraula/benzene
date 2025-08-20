@@ -57,8 +57,8 @@ impl Scene {
             models: Vec::new(),
             texture,
             last_extent: Some(vk::Extent2D {
-                width: v_backend.v_swapchain.images[0].config.extent.width,
-                height: v_backend.v_swapchain.images[0].config.extent.height,
+                width: v_backend.v_swapchain.v_images[0].config.extent.width,
+                height: v_backend.v_swapchain.v_images[0].config.extent.height,
             }),
         };
         let (view, projection) = (Matrix4::identity(), Matrix4::identity());

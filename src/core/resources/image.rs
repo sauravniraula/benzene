@@ -24,7 +24,7 @@ impl Image {
             &v_backend.v_device,
             &v_backend.v_physical_device,
             &v_backend.v_memory_manager,
-            VImageConfig::color_2d(
+            VImageConfig::image_2d(
                 image_extent,
                 image_size,
                 vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,

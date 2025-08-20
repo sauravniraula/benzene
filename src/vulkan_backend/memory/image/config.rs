@@ -40,7 +40,7 @@ impl Default for VImageViewConfig {
 }
 
 impl VImageConfig {
-    pub fn color_2d(
+    pub fn image_2d(
         extent: vk::Extent3D,
         size: u64,
         usage: vk::ImageUsageFlags,
@@ -65,7 +65,7 @@ impl VImageConfig {
         }
     }
 
-    pub fn external_color_2d(
+    pub fn external_2d(
         extent: vk::Extent3D,
         usage: vk::ImageUsageFlags,
         sharing_mode: vk::SharingMode,

@@ -102,9 +102,17 @@ impl VPipelineInfo {
     pub fn get_rasterization_stage(&self) -> vk::PipelineRasterizationStateCreateInfo {
         vk::PipelineRasterizationStateCreateInfo::default()
             .line_width(1.0)
-            // .cull_mode(vk::CullModeFlags::BACK)
-            // .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
-            .cull_mode(vk::CullModeFlags::NONE)
+            .cull_mode(vk::CullModeFlags::BACK)
+            .front_face(vk::FrontFace::CLOCKWISE)
+    }
+
+    pub fn get_depth_stencil_stage(&self) -> vk::PipelineDepthStencilStateCreateInfo {
+        vk::PipelineDepthStencilStateCreateInfo::default()
+            .depth_test_enable(true)
+            .depth_write_enable(true)
+            .depth_compare_op(vk::CompareOp::LESS)
+            .depth_bounds_test_enable(false)
+            .stencil_test_enable(false)
     }
 
     pub fn get_multisampling_stage(&self) -> vk::PipelineMultisampleStateCreateInfo {

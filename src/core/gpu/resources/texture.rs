@@ -17,7 +17,12 @@ pub struct ImageTexture {
 impl ImageTexture {
     pub fn new(v_backend: &VBackend, image_path: &str, format: vk::Format) -> Self {
         let image = Image::new(v_backend, image_path);
-        let image_view = VImageView::new_2d_color(&v_backend.v_device, image.v_image.image, format);
+        let image_view = VImageView::new_2d(
+            &v_backend.v_device,
+            &image.v_image,
+            vk::ImageAspectFlags::COLOR,
+            format,
+        );
         let sampler = VSampler::new(&v_backend.v_device, &v_backend.v_physical_device);
         Self {
             image,
