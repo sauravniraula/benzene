@@ -6,9 +6,10 @@ fn main() {
     let mut scene = game_engine.create_scene();
     scene.attach_camera(Camera::new());
 
-    // let torus_model = game_engine.get_model_from_obj("assets/models/torus-flat.obj");
-    // scene.add_model(torus_model);
+    let torus_model = game_engine.get_model_from_obj("assets/models/vase-smooth.obj");
     let plane_model = game_engine.build_model::<Plane>();
+
+    scene.add_model(torus_model);
     scene.add_model(plane_model);
 
     game_engine.set_active_scene(scene);

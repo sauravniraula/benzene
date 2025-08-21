@@ -52,25 +52,27 @@ impl VRenderingSystem {
         let attachments = [color_attachment, depth_attachment];
         let attachments_count = attachments.len();
 
-        // let subpass_dependency = vk::SubpassDependency::default()
-        //     .src_stage_mask(
-        //         vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
-        //             | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
-        //     )
-        //     .dst_stage_mask(
-        //         vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
-        //             | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
-        //     )
-        //     .src_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
-        //     .dst_access_mask(
-        //         vk::AccessFlags::COLOR_ATTACHMENT_WRITE
-        //             | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
-        //     );
+        let subpass_dependencies = [
+            vk::SubpassDependency::default()
+                .src_subpass(vk::SUBPASS_EXTERNAL)
+                .dst_subpass(0)
+                .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+                .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT),
+            vk::SubpassDependency::default()
+                .src_subpass(vk::SUBPASS_EXTERNAL)
+                .dst_subpass(0)
+                .src_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
+                .src_stage_mask(vk::PipelineStageFlags::LATE_FRAGMENT_TESTS)
+                .dst_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
+                .dst_stage_mask(vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS),
+        ];
 
         let render_pass_info = vk::RenderPassCreateInfo::default()
             .subpasses(&subpasses)
-            .attachments(&attachments);
-            // .dependencies(std::slice::from_ref(&subpass_dependency));
+            .attachments(&attachments)
+            .dependencies(&subpass_dependencies);
 
         let render_pass = unsafe {
             v_device

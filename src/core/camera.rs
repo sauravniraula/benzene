@@ -14,8 +14,8 @@ pub struct Camera {
 
 impl Camera {
     pub fn new() -> Self {
-        let position = Point3::<f32>::new(0.0, 0.0, 7.0);
-        let look_at = Point3::<f32>::new(0.0, 0.0, 0.0);
+        let position = Point3::<f32>::new(0.0, 1.0, 4.0);
+        let look_at = Point3::<f32>::new(0.0, 1.0, 0.0);
         let forward = (look_at - position).normalize();
         let yaw: f32 = forward.z.atan2(forward.x);
         let pitch: f32 = forward.y.asin();

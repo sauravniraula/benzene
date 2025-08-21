@@ -16,7 +16,7 @@ use crate::{
 };
 use ash::vk;
 use glfw::WindowEvent;
-use nalgebra::Matrix4;
+use nalgebra::{Matrix4, Vector3};
 
 pub struct Scene {
     // Descriptor Sets
@@ -56,7 +56,12 @@ impl Scene {
             last_extent: Some(v_backend.v_swapchain.image_extent),
         };
         let (view, projection) = (Matrix4::identity(), Matrix4::identity());
-        let uniform = GlobalUniformObject { view, projection };
+        let light_direction = Vector3::<f32>::new(-1.0, -1.0, -0.5);
+        let uniform = GlobalUniformObject {
+            view,
+            projection,
+            light_direction,
+        };
         scene.global_uniform.upload_all(&uniform);
 
         scene
@@ -77,7 +82,12 @@ impl Scene {
             camera.update(image_extent, dt);
             if extent_changed || camera.take_dirty() {
                 let (view, projection) = camera.view_projection(image_extent);
-                let uniform = GlobalUniformObject { view, projection };
+                let light_direction = Vector3::<f32>::new(-1.0, -1.0, -0.5);
+                let uniform = GlobalUniformObject {
+                    view,
+                    projection,
+                    light_direction,
+                };
                 self.global_uniform.upload_all(&uniform);
             }
         }
@@ -102,7 +112,12 @@ impl Scene {
         if let Some(extent) = self.last_extent {
             if let Some(cam) = &self.camera {
                 let (view, projection) = cam.view_projection(extent);
-                let uniform = GlobalUniformObject { view, projection };
+                let light_direction = Vector3::<f32>::new(-1.0, -1.0, -0.5);
+                let uniform = GlobalUniformObject {
+                    view,
+                    projection,
+                    light_direction,
+                };
                 self.global_uniform.upload_all(&uniform);
             }
         }

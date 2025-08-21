@@ -9,23 +9,28 @@ impl ModelBuilder for Plane {
 
         let vertices: Vec<Vertex3D> = vec![
             Vertex3D {
-                pos: [-2.0, 2.0, 0.0],
+                pos: [-10.0, 0.0, -10.0],
                 color,
                 normal: [0.0, 1.0, 0.0],
             },
             Vertex3D {
-                pos: [2.0, -2.0, 0.0],
+                pos: [10.0, 0.0, 10.0],
                 color,
                 normal: [0.0, 1.0, 0.0],
             },
             Vertex3D {
-                pos: [-2.0, -2.0, 0.0],
+                pos: [-10.0, 0.0, 10.0],
+                color,
+                normal: [0.0, 1.0, 0.0],
+            },
+            Vertex3D {
+                pos: [10.0, 0.0, -10.0],
                 color,
                 normal: [0.0, 1.0, 0.0],
             },
         ];
 
-        let indices: Vec<u32> = vec![0, 2, 1];
+        let indices: Vec<u32> = vec![0, 2, 1, 0, 1, 3];
 
         (vertices, indices)
     }
