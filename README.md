@@ -1,4 +1,4 @@
-## benzene
+## Benzene
 
 Rust Vulkan game engine for simple real‑time rendering. Minimal surface area, ergonomic scene API, and GLFW windowing.
 
