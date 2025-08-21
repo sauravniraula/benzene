@@ -2,7 +2,10 @@ use ash::vk;
 
 use crate::{
     constants::MAX_FRAMES_IN_FLIGHT,
-    core::gpu::recordable::{RecordContext, Recordable},
+    core::{
+        gpu::recordable::{RecordContext, Recordable},
+        model_push_constatn::ModelPushConstant,
+    },
     vulkan_backend::{
         backend::VBackend,
         backend_event::VBackendEvent,
@@ -15,6 +18,7 @@ use crate::{
         },
         device::VDevice,
         pipeline::{VPipelineInfo, VPipelineInfoConfig},
+        push_constant::VPushConstant,
         rendering::{VRenderingSystem, VRenderingSystemConfig, info::VRenderInfo},
         vertex_input::{BindableVertexInput, Vertex3D},
     },
@@ -31,6 +35,9 @@ impl SceneRender {
     pub fn new(v_backend: &VBackend) -> Self {
         let vertex_binding_descriptions = Vertex3D::get_binding_descriptions();
         let vertex_attribute_descriptions = Vertex3D::get_attribute_descriptions();
+
+        let model_push_constant =
+            VPushConstant::new::<ModelPushConstant>(vk::ShaderStageFlags::VERTEX);
 
         let global_uniform_layout = VDescriptorSetLayout::new(
             &v_backend.v_device,
@@ -66,6 +73,7 @@ impl SceneRender {
                 vertex_shader_file: "assets/shaders/shader.vert".into(),
                 fragment_shader_file: "assets/shaders/shader.frag".into(),
             },
+            Some(model_push_constant),
             &descriptor_set_layouts,
         )];
 

@@ -1,7 +1,9 @@
 use super::VPipelineInfoConfig;
 use crate::{
     shared::load_file_as_vec_u32,
-    vulkan_backend::{descriptor::VDescriptorSetLayout, device::VDevice},
+    vulkan_backend::{
+        descriptor::VDescriptorSetLayout, device::VDevice, push_constant::VPushConstant,
+    },
 };
 use ash::vk;
 
@@ -17,7 +19,8 @@ impl VPipelineInfo {
     pub fn new(
         v_device: &VDevice,
         config: VPipelineInfoConfig,
-        descriptor_set_layouts: &Vec<VDescriptorSetLayout>,
+        v_push_constant: Option<VPushConstant>,
+        v_descriptor_set_layouts: &Vec<VDescriptorSetLayout>,
     ) -> Self {
         let mut vert_shader_byte_code_path = config.vertex_shader_file.clone();
         vert_shader_byte_code_path.push_str(".spv");
@@ -45,19 +48,29 @@ impl VPipelineInfo {
                 .expect("failed to create fragment shader module")
         };
 
-        let descriptor_set_layouts: Vec<vk::DescriptorSetLayout> = descriptor_set_layouts
+        let descriptor_set_layouts: Vec<vk::DescriptorSetLayout> = v_descriptor_set_layouts
             .iter()
             .map(|each| each.layout)
             .collect();
 
-        let layout_info =
+        let mut layout_info =
             vk::PipelineLayoutCreateInfo::default().set_layouts(&descriptor_set_layouts);
 
         let layout = unsafe {
-            v_device
-                .device
-                .create_pipeline_layout(&layout_info, None)
-                .expect("failed to create pipeline layout")
+            match v_push_constant {
+                Some(pc) => {
+                    layout_info =
+                        layout_info.push_constant_ranges(std::slice::from_ref(&pc.push_constant));
+                    v_device
+                        .device
+                        .create_pipeline_layout(&layout_info, None)
+                        .expect("failed to create pipeline layout")
+                }
+                None => v_device
+                    .device
+                    .create_pipeline_layout(&layout_info, None)
+                    .expect("failed to create pipeline layout"),
+            }
         };
 
         let color_blend_attachments = vec![
@@ -75,18 +88,18 @@ impl VPipelineInfo {
         }
     }
 
-    pub fn get_vertex_input_stage(&self) -> vk::PipelineVertexInputStateCreateInfo {
+    pub fn get_vertex_input_state(&self) -> vk::PipelineVertexInputStateCreateInfo {
         vk::PipelineVertexInputStateCreateInfo::default()
             .vertex_binding_descriptions(&self.config.binding_descriptions)
             .vertex_attribute_descriptions(&self.config.attribute_descriptions)
     }
 
-    pub fn get_input_assembly_stage(&self) -> vk::PipelineInputAssemblyStateCreateInfo {
+    pub fn get_input_assembly_state(&self) -> vk::PipelineInputAssemblyStateCreateInfo {
         vk::PipelineInputAssemblyStateCreateInfo::default()
             .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
     }
 
-    pub fn get_shader_stages(&self) -> Vec<vk::PipelineShaderStageCreateInfo> {
+    pub fn get_shader_states(&self) -> Vec<vk::PipelineShaderStageCreateInfo> {
         vec![
             vk::PipelineShaderStageCreateInfo::default()
                 .name(c"main")
@@ -99,14 +112,14 @@ impl VPipelineInfo {
         ]
     }
 
-    pub fn get_rasterization_stage(&self) -> vk::PipelineRasterizationStateCreateInfo {
+    pub fn get_rasterization_state(&self) -> vk::PipelineRasterizationStateCreateInfo {
         vk::PipelineRasterizationStateCreateInfo::default()
             .line_width(1.0)
             .cull_mode(vk::CullModeFlags::BACK)
             .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
     }
 
-    pub fn get_depth_stencil_stage(&self) -> vk::PipelineDepthStencilStateCreateInfo {
+    pub fn get_depth_stencil_state(&self) -> vk::PipelineDepthStencilStateCreateInfo {
         vk::PipelineDepthStencilStateCreateInfo::default()
             .depth_test_enable(true)
             .depth_write_enable(true)
@@ -115,13 +128,13 @@ impl VPipelineInfo {
             .stencil_test_enable(false)
     }
 
-    pub fn get_multisampling_stage(&self) -> vk::PipelineMultisampleStateCreateInfo {
+    pub fn get_multisampling_state(&self) -> vk::PipelineMultisampleStateCreateInfo {
         vk::PipelineMultisampleStateCreateInfo::default()
             .sample_shading_enable(false)
             .rasterization_samples(vk::SampleCountFlags::TYPE_1)
     }
 
-    pub fn get_color_blend_stage(&self) -> vk::PipelineColorBlendStateCreateInfo {
+    pub fn get_color_blend_state(&self) -> vk::PipelineColorBlendStateCreateInfo {
         vk::PipelineColorBlendStateCreateInfo::default()
             .attachments(&self.color_blend_attachments)
             .logic_op_enable(false)

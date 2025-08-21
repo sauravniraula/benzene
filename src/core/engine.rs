@@ -4,7 +4,7 @@ use std::time::Instant;
 use crate::{
     core::{
         ModelBuilder,
-        gpu::{model::Model, recordable::Recordable, scene_render::SceneRender},
+        gpu::{game_object::GameObject, recordable::Recordable, scene_render::SceneRender},
         scene::Scene,
     },
     vulkan_backend::{backend::VBackend, rendering::info::VRenderInfo},
@@ -43,12 +43,12 @@ impl GameEngine {
         self.active_scene = Some(scene);
     }
 
-    pub fn build_model<B: ModelBuilder>(&self) -> Model {
-        B::create_model(&self.v_backend)
+    pub fn get_game_object_from_model_builder<B: ModelBuilder>(&self) -> GameObject {
+        GameObject::new(B::create_model(&self.v_backend))
     }
 
-    pub fn get_model_from_obj(&self, obj_path: &str) -> Model {
-        Model::from_obj(&self.v_backend, obj_path)
+    pub fn get_game_object_from_obj(&self, obj_path: &str) -> GameObject {
+        GameObject::from_obj(&self.v_backend, obj_path)
     }
 
     pub fn run(&mut self) {
@@ -59,7 +59,7 @@ impl GameEngine {
         while !self.window.pwindow.should_close() {
             self.window.glfwi.poll_events();
             self.handle_window_events();
-            self.update();
+            self.pre_render();
             self.render();
         }
     }
@@ -80,14 +80,14 @@ impl GameEngine {
         }
     }
 
-    fn update(&mut self) {
+    fn pre_render(&mut self) {
         let current_instant = Instant::now();
         let dt = current_instant.duration_since(self.last_frame_instant);
         self.last_frame_instant = current_instant;
 
-        // Update the scene
+        // Pre-render the scene
         if let Some(scene) = &mut self.active_scene {
-            scene.update(self.v_backend.v_swapchain.image_extent, dt.as_secs_f32());
+            scene.pre_render(self.v_backend.v_swapchain.image_extent, dt.as_secs_f32());
         }
     }
 

@@ -94,22 +94,22 @@ impl VRenderingSystem {
 
         let mut vertex_input_states = Vec::new();
         let mut input_assembly_states = Vec::new();
-        let mut shader_stages = Vec::new();
-        let mut rasterization_stages = Vec::new();
-        let mut depth_stencil_stages = Vec::new();
-        let mut multisampling_stages = Vec::new();
-        let mut color_blend_stages = Vec::new();
+        let mut shader_states = Vec::new();
+        let mut rasterization_states = Vec::new();
+        let mut depth_stencil_states = Vec::new();
+        let mut multisampling_states = Vec::new();
+        let mut color_blend_states = Vec::new();
         let mut dynamic_states = Vec::new();
         let mut viewport_states = Vec::new();
 
         for info in config.pipeline_infos {
-            vertex_input_states.push(info.get_vertex_input_stage());
-            input_assembly_states.push(info.get_input_assembly_stage());
-            shader_stages.push(info.get_shader_stages());
-            rasterization_stages.push(info.get_rasterization_stage());
-            depth_stencil_stages.push(info.get_depth_stencil_stage());
-            multisampling_stages.push(info.get_multisampling_stage());
-            color_blend_stages.push(info.get_color_blend_stage());
+            vertex_input_states.push(info.get_vertex_input_state());
+            input_assembly_states.push(info.get_input_assembly_state());
+            shader_states.push(info.get_shader_states());
+            rasterization_states.push(info.get_rasterization_state());
+            depth_stencil_states.push(info.get_depth_stencil_state());
+            multisampling_states.push(info.get_multisampling_state());
+            color_blend_states.push(info.get_color_blend_state());
             dynamic_states.push(info.get_dynamic_state());
             viewport_states.push(info.get_viewport_state());
         }
@@ -119,11 +119,11 @@ impl VRenderingSystem {
                 .render_pass(render_pass)
                 .vertex_input_state(&vertex_input_states[i])
                 .input_assembly_state(&input_assembly_states[i])
-                .stages(&shader_stages[i])
-                .rasterization_state(&rasterization_stages[i])
-                .depth_stencil_state(&depth_stencil_stages[i])
-                .multisample_state(&multisampling_stages[i])
-                .color_blend_state(&color_blend_stages[i])
+                .stages(&shader_states[i])
+                .rasterization_state(&rasterization_states[i])
+                .depth_stencil_state(&depth_stencil_states[i])
+                .multisample_state(&multisampling_states[i])
+                .color_blend_state(&color_blend_states[i])
                 .dynamic_state(&dynamic_states[i])
                 .viewport_state(&viewport_states[i])
                 .layout(config.pipeline_infos[i].layout);

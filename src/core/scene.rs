@@ -2,9 +2,9 @@ use crate::{
     core::{
         camera::Camera,
         gpu::{
+            game_object::GameObject,
             global_uniform::{GlobalUniform, GlobalUniformObject},
-            model::Model,
-            recordable::{Drawable, RecordContext, Recordable},
+            recordable::{RecordContext, Recordable},
             scene_render::SceneRender,
             texture::ImageTexture,
         },
@@ -25,7 +25,7 @@ pub struct Scene {
 
     camera: Option<Camera>,
     global_uniform: GlobalUniform,
-    models: Vec<Model>,
+    game_objects: Vec<GameObject>,
     texture: ImageTexture,
     last_extent: Option<vk::Extent2D>,
 }
@@ -55,7 +55,7 @@ impl Scene {
             image_sampler_set,
             camera: None,
             global_uniform,
-            models: Vec::new(),
+            game_objects: Vec::new(),
             texture,
             last_extent: Some(v_backend.v_swapchain.image_extent),
         };
@@ -77,7 +77,7 @@ impl Scene {
         }
     }
 
-    pub fn update(&mut self, image_extent: vk::Extent2D, dt: f32) {
+    pub fn pre_render(&mut self, image_extent: vk::Extent2D, dt: f32) {
         let extent_changed = match self.last_extent {
             Some(prev) => prev.width != image_extent.width || prev.height != image_extent.height,
             None => true,
@@ -96,6 +96,11 @@ impl Scene {
             }
         }
         self.last_extent = Some(image_extent);
+
+        // Update Game Objects
+        for game_object in self.game_objects.iter_mut() {
+            game_object.pre_render();
+        }
     }
 
     pub fn destroy(&self, v_backend: &VBackend) {
@@ -103,7 +108,7 @@ impl Scene {
             camera.destroy();
         }
         self.global_uniform.destroy(v_backend);
-        for each in self.models.iter() {
+        for each in self.game_objects.iter() {
             each.destroy(v_backend);
         }
         self.texture.destroy(v_backend);
@@ -129,8 +134,8 @@ impl Scene {
     pub fn detach_camera(&mut self) {
         self.camera = None;
     }
-    pub fn add_model(&mut self, model: Model) {
-        self.models.push(model);
+    pub fn add_game_object(&mut self, game_object: GameObject) {
+        self.game_objects.push(game_object);
     }
 }
 
@@ -149,8 +154,8 @@ impl Recordable for Scene {
                 &[],
             );
 
-            for model in self.models.iter() {
-                model.draw(ctx.v_device, ctx.cmd);
+            for game_object in self.game_objects.iter() {
+                game_object.record(ctx);
             }
         }
     }
