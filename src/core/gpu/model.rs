@@ -1,11 +1,14 @@
 use ash::vk;
 
-use crate::{core::gpu::recordable::Drawable, vulkan_backend::{
-    backend::VBackend,
-    device::VDevice,
-    memory::{VBuffer, VBufferConfig},
-    vertex_input::Vertex3D,
-}};
+use crate::{
+    core::gpu::recordable::Drawable,
+    vulkan_backend::{
+        backend::VBackend,
+        device::VDevice,
+        memory::{VBuffer, VBufferConfig},
+        vertex_input::Vertex3D,
+    },
+};
 
 pub struct Model {
     pub v_buffer: VBuffer,
@@ -85,6 +88,10 @@ impl Model {
                     mesh.normals[3 * i],
                     mesh.normals[3 * i + 1],
                     mesh.normals[3 * i + 2],
+                ],
+                uv: [
+                    mesh.texcoords[2 * i],
+                    mesh.texcoords[2 * 1 + 1],
                 ],
             });
         }

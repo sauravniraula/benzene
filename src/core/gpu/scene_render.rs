@@ -1,20 +1,24 @@
 use ash::vk;
 
-use crate::{constants::MAX_FRAMES_IN_FLIGHT, core::gpu::recordable::{RecordContext, Recordable}, vulkan_backend::{
-    backend::VBackend,
-    backend_event::VBackendEvent,
-    descriptor::{
-        config::{
-            VDescriptorBindingConfig, VDescriptorLayoutConfig, VDescriptorPoolConfig,
-            VDescriptorPoolSetConfig,
-        }, VDescriptorPool, VDescriptorSetLayout, VDescriptorSets
+use crate::{
+    constants::MAX_FRAMES_IN_FLIGHT,
+    core::gpu::recordable::{RecordContext, Recordable},
+    vulkan_backend::{
+        backend::VBackend,
+        backend_event::VBackendEvent,
+        descriptor::{
+            VDescriptorPool, VDescriptorSetLayout, VDescriptorSets,
+            config::{
+                VDescriptorBindingConfig, VDescriptorLayoutConfig, VDescriptorPoolConfig,
+                VDescriptorPoolSetConfig,
+            },
+        },
+        device::VDevice,
+        pipeline::{VPipelineInfo, VPipelineInfoConfig},
+        rendering::{VRenderingSystem, VRenderingSystemConfig, info::VRenderInfo},
+        vertex_input::{BindableVertexInput, Vertex3D},
     },
-    device::VDevice,
-    pipeline::{VPipelineInfo, VPipelineInfoConfig},
-    rendering::{ info::VRenderInfo, VRenderingSystem, VRenderingSystemConfig},
-    vertex_input::{BindableVertexInput, Vertex3D},
-}};
-
+};
 
 pub struct SceneRender {
     v_rendering_system: VRenderingSystem,
@@ -27,26 +31,32 @@ impl SceneRender {
     pub fn new(v_backend: &VBackend) -> Self {
         let vertex_binding_descriptions = Vertex3D::get_binding_descriptions();
         let vertex_attribute_descriptions = Vertex3D::get_attribute_descriptions();
-        let single_set_layout = VDescriptorSetLayout::new(
+
+        let global_uniform_layout = VDescriptorSetLayout::new(
             &v_backend.v_device,
             VDescriptorLayoutConfig {
-                bindings: vec![
-                    VDescriptorBindingConfig {
-                        binding: 0,
-                        count: 1,
-                        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                        shader_stage: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-                    },
-                    VDescriptorBindingConfig {
-                        binding: 1,
-                        count: 1,
-                        descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                        shader_stage: vk::ShaderStageFlags::FRAGMENT,
-                    },
-                ],
+                bindings: vec![VDescriptorBindingConfig {
+                    binding: 0,
+                    count: 1,
+                    descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                    shader_stage: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                }],
             },
         );
-        let descriptor_set_layouts = [single_set_layout].into();
+
+        let image_sampler_layout = VDescriptorSetLayout::new(
+            &v_backend.v_device,
+            VDescriptorLayoutConfig {
+                bindings: vec![VDescriptorBindingConfig {
+                    binding: 0,
+                    count: 1,
+                    descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                    shader_stage: vk::ShaderStageFlags::FRAGMENT,
+                }],
+            },
+        );
+
+        let descriptor_set_layouts = [global_uniform_layout, image_sampler_layout].into();
 
         let pipeline_infos = vec![VPipelineInfo::new(
             &v_backend.v_device,
@@ -68,10 +78,16 @@ impl SceneRender {
         );
 
         let descriptor_pool_config = VDescriptorPoolConfig {
-            sets: vec![VDescriptorPoolSetConfig {
-                layout: descriptor_set_layouts[0].config.clone(),
-                count: MAX_FRAMES_IN_FLIGHT,
-            }],
+            sets: vec![
+                VDescriptorPoolSetConfig {
+                    layout: descriptor_set_layouts[0].config.clone(),
+                    count: MAX_FRAMES_IN_FLIGHT,
+                },
+                VDescriptorPoolSetConfig {
+                    layout: descriptor_set_layouts[1].config.clone(),
+                    count: 1,
+                },
+            ],
         };
         let descriptor_pool = VDescriptorPool::new(&v_backend.v_device, &descriptor_pool_config);
 
@@ -83,12 +99,21 @@ impl SceneRender {
         }
     }
 
-    pub fn get_descriptor_set(&self, v_device: &VDevice) -> VDescriptorSets {
+    pub fn get_global_uniform_descriptor_set(&self, v_device: &VDevice) -> VDescriptorSets {
         VDescriptorSets::new(
             v_device,
             &self.descriptor_pool,
             &self.descriptor_set_layouts[0],
             MAX_FRAMES_IN_FLIGHT,
+        )
+    }
+
+    pub fn get_image_sampler_descriptor_set(&self, v_device: &VDevice) -> VDescriptorSets {
+        VDescriptorSets::new(
+            v_device,
+            &self.descriptor_pool,
+            &self.descriptor_set_layouts[1],
+            1,
         )
     }
 

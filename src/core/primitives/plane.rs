@@ -12,21 +12,25 @@ impl ModelBuilder for Plane {
                 pos: [-10.0, 0.0, -10.0],
                 color,
                 normal: [0.0, 1.0, 0.0],
+                uv: [0.0, 0.0],
             },
             Vertex3D {
                 pos: [10.0, 0.0, 10.0],
                 color,
                 normal: [0.0, 1.0, 0.0],
+                uv: [1.0, 1.0],
             },
             Vertex3D {
                 pos: [-10.0, 0.0, 10.0],
                 color,
                 normal: [0.0, 1.0, 0.0],
+                uv: [0.0, 1.0],
             },
             Vertex3D {
                 pos: [10.0, 0.0, -10.0],
                 color,
                 normal: [0.0, 1.0, 0.0],
+                uv: [1.0, 0.0],
             },
         ];
 

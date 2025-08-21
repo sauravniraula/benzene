@@ -20,7 +20,8 @@ use nalgebra::{Matrix4, Vector3};
 
 pub struct Scene {
     // Descriptor Sets
-    single_sets: VDescriptorSets,
+    global_uniform_set: VDescriptorSets,
+    image_sampler_set: VDescriptorSets,
 
     camera: Option<Camera>,
     global_uniform: GlobalUniform,
@@ -31,9 +32,11 @@ pub struct Scene {
 
 impl Scene {
     pub fn new(v_backend: &VBackend, scene_render: &SceneRender) -> Self {
-        let single_sets = scene_render.get_descriptor_set(&v_backend.v_device);
+        let global_uniform_set =
+            scene_render.get_global_uniform_descriptor_set(&v_backend.v_device);
         let global_uniform = GlobalUniform::new(v_backend);
 
+        let image_sampler_set = scene_render.get_image_sampler_descriptor_set(&v_backend.v_device);
         let texture = ImageTexture::new(
             v_backend,
             "assets/textures/cracked-dirt512x512.jpg",
@@ -41,14 +44,15 @@ impl Scene {
         );
         {
             let mut batch = VDescriptorWriteBatch::new();
-            global_uniform.queue_descriptor_writes(&single_sets, &mut batch);
-            texture.queue_descriptor_writes(&single_sets, &mut batch);
+            global_uniform.queue_descriptor_writes(&global_uniform_set, &mut batch);
+            texture.queue_descriptor_writes(&image_sampler_set, &mut batch);
 
             batch.flush(&v_backend.v_device);
         }
 
         let mut scene = Self {
-            single_sets,
+            global_uniform_set,
+            image_sampler_set,
             camera: None,
             global_uniform,
             models: Vec::new(),
@@ -138,7 +142,10 @@ impl Recordable for Scene {
                 vk::PipelineBindPoint::GRAPHICS,
                 ctx.pipeline_layout,
                 0,
-                &[self.single_sets.sets[ctx.frame_index]],
+                &[
+                    self.global_uniform_set.sets[ctx.frame_index],
+                    self.image_sampler_set.sets[0],
+                ],
                 &[],
             );
 

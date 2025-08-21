@@ -71,7 +71,7 @@ impl ImageTexture {
         let samplers = (0..sets.count).map(|_| &self.sampler).collect::<Vec<_>>();
         sets.queue_image_all(
             batch,
-            1,
+            0,
             vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
             &views,
             &samplers,
