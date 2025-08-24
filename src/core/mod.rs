@@ -3,7 +3,7 @@ pub mod scene;
 pub mod camera;
 pub mod primitives;
 pub mod gpu;
-pub mod model_push_constatn;
+pub mod model_push_constant;
 
 pub use engine::GameEngine;
 

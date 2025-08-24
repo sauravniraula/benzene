@@ -15,9 +15,9 @@ fn main() {
 
     let plane_model = game_engine.get_game_object_from_model_builder::<Plane>();
 
-    flat_vase_model.set_position(Vector3::new(-2.0, 0.0, 0.0));
-    flat_torus_model.set_position(Vector3::new(4.0, 0.5, 4.0));
-    smooth_torus_model.set_position(Vector3::new(4.0, 0.5, 0.0));
+    flat_vase_model.set_position(Vector3::new(-8.0, 0.0, 0.0));
+    flat_torus_model.set_position(Vector3::new(8.0, 0.5, 8.0));
+    smooth_torus_model.set_position(Vector3::new(8.0, 0.5, -8.0));
 
     scene.add_game_object(smooth_vase_model);
     scene.add_game_object(plane_model);

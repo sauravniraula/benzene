@@ -1,5 +1,5 @@
 use ash::vk;
-use nalgebra::{Matrix4, Vector3};
+use nalgebra::{Matrix4, Vector4};
 
 use crate::{
     constants::MAX_FRAMES_IN_FLIGHT,
@@ -13,7 +13,8 @@ use crate::{
 pub struct GlobalUniformObject {
     pub view: Matrix4<f32>,
     pub projection: Matrix4<f32>,
-    pub light_direction: Vector3<f32>,
+    pub light_direction: Vector4<f32>,
+    pub point_light: Vector4<f32>,
 }
 
 pub struct GlobalUniform {

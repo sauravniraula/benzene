@@ -7,7 +7,7 @@ use crate::{
             model::Model,
             recordable::{Drawable, RecordContext, Recordable},
         },
-        model_push_constatn::ModelPushConstant,
+        model_push_constant::ModelPushConstant,
     },
     vulkan_backend::backend::VBackend,
 };
@@ -126,7 +126,7 @@ impl Recordable for GameObject {
             ctx.v_device.device.cmd_push_constants(
                 ctx.cmd,
                 ctx.pipeline_layout,
-                vk::ShaderStageFlags::VERTEX,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 0,
                 data,
             );

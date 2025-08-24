@@ -4,7 +4,7 @@ use crate::{
     constants::MAX_FRAMES_IN_FLIGHT,
     core::{
         gpu::recordable::{RecordContext, Recordable},
-        model_push_constatn::ModelPushConstant,
+        model_push_constant::ModelPushConstant,
     },
     vulkan_backend::{
         backend::VBackend,
@@ -36,8 +36,9 @@ impl SceneRender {
         let vertex_binding_descriptions = Vertex3D::get_binding_descriptions();
         let vertex_attribute_descriptions = Vertex3D::get_attribute_descriptions();
 
-        let model_push_constant =
-            VPushConstant::new::<ModelPushConstant>(vk::ShaderStageFlags::VERTEX);
+        let model_push_constant = VPushConstant::new::<ModelPushConstant>(
+            vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+        );
 
         let global_uniform_layout = VDescriptorSetLayout::new(
             &v_backend.v_device,
