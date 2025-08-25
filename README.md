@@ -69,7 +69,7 @@ fn main() {
 ### Controls (defaults)
 - **W/A/S/D**: move left/right/back/forward
 - **Space**: move up
-- **Left Ctrl**: move down
+- **Alt**: move down
 - **Shift**: speed boost
 - **Arrow keys**: look around (yaw/pitch)
 - **Esc**: quit

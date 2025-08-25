@@ -1,28 +1,26 @@
 use ash::vk;
 use nalgebra::{Matrix4, Vector4};
 
-use crate::{
-    constants::MAX_FRAMES_IN_FLIGHT,
-    vulkan_backend::{
-        backend::VBackend,
-        descriptor::{VDescriptorSets, VDescriptorWriteBatch},
-        memory::VUniformBuffer,
-    },
+use crate::vulkan_backend::{
+    backend::VBackend,
+    descriptor::{VDescriptorSets, VDescriptorWriteBatch},
+    memory::VUniformBuffer,
 };
 
 pub struct GlobalUniformObject {
     pub view: Matrix4<f32>,
     pub projection: Matrix4<f32>,
-    pub point_light: Vector4<f32>,
+    pub ambient_color: Vector4<f32>,
 }
 
 pub struct GlobalUniform {
+    count: usize,
     uniform_buffers: Vec<VUniformBuffer<GlobalUniformObject>>,
 }
 
 impl GlobalUniform {
-    pub fn new(v_backend: &VBackend) -> Self {
-        let uniform_buffers: Vec<VUniformBuffer<_>> = (0..MAX_FRAMES_IN_FLIGHT)
+    pub fn new(v_backend: &VBackend, count: usize) -> Self {
+        let uniform_buffers: Vec<VUniformBuffer<_>> = (0..count)
             .map(|_| {
                 let mut u = VUniformBuffer::new(
                     &v_backend.v_device,
@@ -35,7 +33,10 @@ impl GlobalUniform {
             })
             .collect();
 
-        Self { uniform_buffers }
+        Self {
+            count,
+            uniform_buffers,
+        }
     }
 
     pub fn queue_descriptor_writes(
@@ -60,7 +61,7 @@ impl GlobalUniform {
     }
 
     pub fn upload_all(&mut self, data: &GlobalUniformObject) {
-        for frame_index in 0..MAX_FRAMES_IN_FLIGHT {
+        for frame_index in 0..self.count {
             self.upload(frame_index, data);
         }
     }

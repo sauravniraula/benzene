@@ -8,8 +8,8 @@ pub fn translate_transform_3d(t: &mut Transform3D, delta: Vector3<f32>) {
 }
 
 // delta contains (roll, pitch, yaw)
-pub fn rotate_transform_3d(t: &mut Transform3D, delta_euler: Vector3<f32>) {
-    t.rotation_euler += delta_euler;
+pub fn rotate_transform_3d(t: &mut Transform3D, delta: Vector3<f32>) {
+    t.rotation += delta;
     t.dirty = true;
 }
 
@@ -26,7 +26,7 @@ pub fn scale_transform_3d_set(t: &mut Transform3D, new_scale: Vector3<f32>) {
 }
 
 pub fn update_transform_3d_matrix(t: &mut Transform3D) {
-    let r = UnitQuaternion::from_euler_angles(t.rotation_euler.x, t.rotation_euler.y, t.rotation_euler.z);
+    let r = UnitQuaternion::from_euler_angles(t.rotation.x, t.rotation.y, t.rotation.z);
     let s = Matrix4::new_nonuniform_scaling(&t.scale);
     let tr = Translation3::new(t.position.x, t.position.y, t.position.z);
     t.cached_transform = tr.to_homogeneous() * r.to_homogeneous() * s;
@@ -40,5 +40,3 @@ pub fn update_transforms_3d(transforms: &mut [Transform3D]) {
         }
     }
 }
-
-

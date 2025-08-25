@@ -3,7 +3,7 @@
 layout(set=0, binding = 0) uniform GlobalUniform {
   mat4 view;
   mat4 projection;
-  vec4 point_light;
+  vec4 ambient_color;
 } gu;
 
 layout (push_constant) uniform constants {

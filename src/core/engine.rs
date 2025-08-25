@@ -3,7 +3,6 @@ use std::time::Instant;
 
 use crate::{
     core::{
-        ModelBuilder,
         ecs::components::Structure3D,
         gpu::{recordable::Recordable, scene_render::SceneRender},
         scene::Scene,
@@ -42,10 +41,6 @@ impl GameEngine {
 
     pub fn set_active_scene(&mut self, scene: Scene) {
         self.active_scene = Some(scene);
-    }
-
-    pub fn get_structure_from_model_builder<B: ModelBuilder>(&self) -> Structure3D {
-        Structure3D::new(B::create_model(&self.v_backend))
     }
 
     pub fn get_structure_from_obj(&self, obj_path: &str) -> Structure3D {

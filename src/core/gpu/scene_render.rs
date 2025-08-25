@@ -10,9 +10,7 @@ use crate::{
         backend_event::VBackendEvent,
         descriptor::{
             VDescriptorSetLayout,
-            config::{
-                VDescriptorBindingConfig, VDescriptorLayoutConfig,
-            },
+            config::{VDescriptorBindingConfig, VDescriptorLayoutConfig},
         },
         device::VDevice,
         pipeline::{VPipelineInfo, VPipelineInfoConfig},
@@ -49,6 +47,17 @@ impl SceneRender {
                 }],
             },
         );
+        let point_light_uniform_layout = VDescriptorSetLayout::new(
+            &v_backend.v_device,
+            VDescriptorLayoutConfig {
+                bindings: vec![VDescriptorBindingConfig {
+                    binding: 0,
+                    count: 1,
+                    descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                    shader_stage: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                }],
+            },
+        );
         let image_sampler_layout = VDescriptorSetLayout::new(
             &v_backend.v_device,
             VDescriptorLayoutConfig {
@@ -60,7 +69,11 @@ impl SceneRender {
                 }],
             },
         );
-        let descriptor_sets_layouts = vec![global_uniform_layout, image_sampler_layout];
+        let descriptor_sets_layouts = vec![
+            global_uniform_layout,
+            point_light_uniform_layout,
+            image_sampler_layout,
+        ];
 
         let pipeline_infos = vec![VPipelineInfo::new(
             &v_backend.v_device,

@@ -3,3 +3,4 @@ pub mod recordable;
 pub mod scene_render;
 pub mod texture;
 pub mod model;
+pub mod point_light_uniform;
