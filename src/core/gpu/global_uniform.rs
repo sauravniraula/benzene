@@ -13,7 +13,6 @@ use crate::{
 pub struct GlobalUniformObject {
     pub view: Matrix4<f32>,
     pub projection: Matrix4<f32>,
-    pub light_direction: Vector4<f32>,
     pub point_light: Vector4<f32>,
 }
 

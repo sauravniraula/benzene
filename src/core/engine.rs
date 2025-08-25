@@ -4,7 +4,8 @@ use std::time::Instant;
 use crate::{
     core::{
         ModelBuilder,
-        gpu::{game_object::GameObject, recordable::Recordable, scene_render::SceneRender},
+        ecs::components::Structure3D,
+        gpu::{recordable::Recordable, scene_render::SceneRender},
         scene::Scene,
     },
     vulkan_backend::{backend::VBackend, rendering::info::VRenderInfo},
@@ -43,12 +44,12 @@ impl GameEngine {
         self.active_scene = Some(scene);
     }
 
-    pub fn get_game_object_from_model_builder<B: ModelBuilder>(&self) -> GameObject {
-        GameObject::new(B::create_model(&self.v_backend))
+    pub fn get_structure_from_model_builder<B: ModelBuilder>(&self) -> Structure3D {
+        Structure3D::new(B::create_model(&self.v_backend))
     }
 
-    pub fn get_game_object_from_obj(&self, obj_path: &str) -> GameObject {
-        GameObject::from_obj(&self.v_backend, obj_path)
+    pub fn get_structure_from_obj(&self, obj_path: &str) -> Structure3D {
+        Structure3D::from_obj(&self.v_backend, obj_path)
     }
 
     pub fn run(&mut self) {
@@ -87,7 +88,7 @@ impl GameEngine {
 
         // Pre-render the scene
         if let Some(scene) = &mut self.active_scene {
-            scene.pre_render(self.v_backend.v_swapchain.image_extent, dt.as_secs_f32());
+            scene.pre_render(dt.as_secs_f32());
         }
     }
 
@@ -101,6 +102,9 @@ impl GameEngine {
             .check_render_issues(&self.window, render_result)
         {
             self.scene_render.handle_backend_event(&event);
+            if let Some(scene) = &mut self.active_scene {
+                scene.handle_backend_event(&event);
+            }
         }
     }
 

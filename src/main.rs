@@ -1,33 +1,54 @@
-use benzene::core::{GameEngine, camera::Camera, primitives::plane::Plane};
-use nalgebra::Vector3;
+use benzene::core::{
+    GameEngine,
+    ecs::{
+        components::{Camera3D, PointLight3D, Structure3D, Transform3D},
+        entities::game_object::GameObject,
+    },
+    primitives::plane::Plane,
+};
+use nalgebra::{Vector3, Vector4};
 
 fn main() {
     let mut game_engine = GameEngine::new();
 
     let mut scene = game_engine.create_scene();
-    scene.attach_camera(Camera::new());
 
-    let smooth_vase_model = game_engine.get_game_object_from_obj("assets/models/vase-smooth.obj");
-    let mut flat_vase_model = game_engine.get_game_object_from_obj("assets/models/vase-flat.obj");
-    let mut flat_torus_model = game_engine.get_game_object_from_obj("assets/models/torus-flat.obj");
-    let mut smooth_torus_model =
-        game_engine.get_game_object_from_obj("assets/models/torus-smooth.obj");
+    // Create entities
+    let camera_entity = GameObject::new("Camera");
+    let light_entity = GameObject::new("Light");
+    let plane_entity = GameObject::new("Plane");
 
-    let plane_model = game_engine.get_game_object_from_model_builder::<Plane>();
+    // Attach components
+    scene.add_game_object(camera_entity.clone(), Transform3D::new_default());
+    scene.add_camera_component(&camera_entity, Camera3D::new_default());
+    scene.set_active_camera(&camera_entity);
 
-    flat_vase_model.set_position(Vector3::new(-8.0, 0.0, 0.0));
-    flat_torus_model.set_position(Vector3::new(8.0, 0.5, 8.0));
-    smooth_torus_model.set_position(Vector3::new(8.0, 0.5, -8.0));
+    scene.add_game_object(
+        light_entity.clone(),
+        Transform3D::new(
+            Vector3::new(5.0, 2.0, 5.0),
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 1.0, 1.0),
+        ),
+    );
+    scene.add_point_light_component(
+        &light_entity,
+        PointLight3D::new(Vector4::new(1.0, 1.0, 1.0, 1.0)),
+    );
 
-    scene.add_game_object(smooth_vase_model);
-    scene.add_game_object(plane_model);
-    scene.add_game_object(flat_vase_model);
-    scene.add_game_object(flat_torus_model);
-    scene.add_game_object(smooth_torus_model);
+    let plane_structure: Structure3D = game_engine.get_structure_from_model_builder::<Plane>();
+    scene.add_game_object(
+        plane_entity.clone(),
+        Transform3D::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 1.0, 1.0),
+        ),
+    );
+    scene.add_structure_3d_component(&plane_entity, plane_structure);
 
     game_engine.set_active_scene(scene);
 
     game_engine.run();
-
     game_engine.destroy();
 }

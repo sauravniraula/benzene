@@ -1,6 +1,5 @@
 use ash::vk;
 
-#[derive(Clone)]
 pub struct VDescriptorBindingConfig {
     pub binding: u32,
     pub count: u32,
@@ -8,16 +7,17 @@ pub struct VDescriptorBindingConfig {
     pub shader_stage: vk::ShaderStageFlags,
 }
 
-#[derive(Clone)]
 pub struct VDescriptorLayoutConfig {
     pub bindings: Vec<VDescriptorBindingConfig>,
 }
 
-pub struct VDescriptorPoolSetConfig {
-    pub layout: VDescriptorLayoutConfig,
-    pub count: usize,
+
+pub struct VDescriptorPoolTypeConfig {
+    pub descriptor_type: vk::DescriptorType,
+    pub count: u32,
 }
 
 pub struct VDescriptorPoolConfig {
-    pub sets: Vec<VDescriptorPoolSetConfig>,
+    pub types: Vec<VDescriptorPoolTypeConfig>,
+    pub max_sets: u32,
 }
