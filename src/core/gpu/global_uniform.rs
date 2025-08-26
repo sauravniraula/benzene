@@ -57,7 +57,7 @@ impl GlobalUniform {
     }
 
     pub fn upload(&mut self, frame_index: usize, data: &GlobalUniformObject) {
-        self.uniform_buffers[frame_index].copy(data);
+        self.uniform_buffers[frame_index].copy(data as *const GlobalUniformObject as *const u8);
     }
 
     pub fn upload_all(&mut self, data: &GlobalUniformObject) {

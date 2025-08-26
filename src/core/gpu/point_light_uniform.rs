@@ -45,7 +45,8 @@ impl PointLightUniform {
     }
 
     pub fn upload(&mut self, data: &PointLightUniformObject) {
-        self.uniform_buffer.copy(data);
+        self.uniform_buffer
+            .copy(data as *const PointLightUniformObject as *const u8);
     }
 
     pub fn destroy(&self, v_backend: &VBackend) {

@@ -37,18 +37,17 @@ impl<T> VUniformBuffer<T> {
         }
     }
 
-    pub fn copy(&self, data: &T) {
-        if let VMemoryState::MAPPED(address) = self.v_buffer.v_memory.state {
+    pub fn copy(&self, data: *const u8) {
+        if let VMemoryState::MAPPED(_, __, address) = self.v_buffer.v_memory.state {
             unsafe {
-                let src = data as *const T as *const u8;
-                std::ptr::copy_nonoverlapping(src, address, size_of::<T>());
+                std::ptr::copy_nonoverlapping(data, address, size_of::<T>());
             }
         }
     }
+
+    pub fn copy_region(&self, offset: u64, size: u64, data: *const u8) {}
 
     pub fn destroy(&self, v_device: &VDevice, v_memory_manager: &VMemoryManager) {
         self.v_buffer.destroy(v_device, v_memory_manager);
     }
 }
-
-

@@ -57,31 +57,23 @@ impl VMemoryManager {
         }
     }
 
-    pub fn map_memory(&self, v_device: &VDevice, memory: vk::DeviceMemory, size: u64) -> *mut u8 {
+    pub fn map_memory(
+        &self,
+        v_device: &VDevice,
+        memory: vk::DeviceMemory,
+        offset: u64,
+        size: u64,
+    ) -> *mut u8 {
         unsafe {
             v_device
                 .device
-                .map_memory(memory, 0, size, vk::MemoryMapFlags::empty())
+                .map_memory(memory, offset, size, vk::MemoryMapFlags::empty())
                 .expect("failed to map memory") as *mut u8
         }
     }
 
     pub fn unmap_memory(&self, v_device: &VDevice, memory: vk::DeviceMemory) {
         unsafe { v_device.device.unmap_memory(memory) };
-    }
-
-    pub fn copy_data_to_memory(
-        &self,
-        v_device: &VDevice,
-        memory: vk::DeviceMemory,
-        data: *const u8,
-        size: u64,
-    ) {
-        unsafe {
-            let destination = self.map_memory(v_device, memory, size);
-            std::ptr::copy_nonoverlapping(data, destination, size as usize);
-            v_device.device.unmap_memory(memory);
-        };
     }
 
     pub fn run_single_cmd_submit(

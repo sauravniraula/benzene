@@ -91,7 +91,7 @@ impl VImage {
         data: *const u8,
         size: u64,
     ) {
-        let staging_buffer = VBuffer::new(
+        let mut staging_buffer = VBuffer::new(
             v_device,
             v_physical_device,
             v_memory_manager,
@@ -104,7 +104,7 @@ impl VImage {
                     | vk::MemoryPropertyFlags::HOST_COHERENT,
             },
         );
-        staging_buffer.copy_to_buffer(v_device, v_physical_device, v_memory_manager, data, size);
+        staging_buffer.copy_to_buffer(v_device, v_physical_device, v_memory_manager, 0, size, data);
         v_memory_manager.run_single_cmd_submit(v_device, true, |cmd| {
             self.transition_layout(
                 v_device,

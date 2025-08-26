@@ -7,7 +7,10 @@ use crate::{
         gpu::{recordable::Recordable, scene_render::SceneRender},
         scene::Scene,
     },
-    vulkan_backend::{backend::VBackend, rendering::info::VRenderInfo},
+    vulkan_backend::{
+        backend::VBackend,
+        rendering::info::VRenderInfo,
+    },
     window::{Window, WindowConfig},
 };
 

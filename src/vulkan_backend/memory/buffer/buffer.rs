@@ -71,10 +71,15 @@ impl VBuffer {
         v_device: &VDevice,
         v_memory_manager: &VMemoryManager,
     ) -> VMemoryState {
-        self.v_memory.map(v_device, v_memory_manager, self.config.size)
+        self.v_memory
+            .map(v_device, v_memory_manager, 0, self.config.size)
     }
 
-    pub fn unmap_memory(&mut self, v_device: &VDevice, v_memory_manager: &VMemoryManager) -> VMemoryState {
+    pub fn unmap_memory(
+        &mut self,
+        v_device: &VDevice,
+        v_memory_manager: &VMemoryManager,
+    ) -> VMemoryState {
         self.v_memory.unmap(v_device, v_memory_manager)
     }
 
@@ -85,18 +90,22 @@ impl VBuffer {
     }
 
     pub fn copy_to_buffer(
-        &self,
+        &mut self,
         v_device: &VDevice,
         v_physical_device: &VPhysicalDevice,
         v_memory_manager: &VMemoryManager,
-        data: *const u8,
+        offset: u64,
         size: u64,
+        data: *const u8,
     ) {
         if self.is_host_visible() {
-            v_memory_manager.copy_data_to_memory(v_device, self.v_memory.memory, data, size);
+            let mapped = self.v_memory.map(v_device, v_memory_manager, offset, size);
+            if let VMemoryState::MAPPED(_, __, dst) = mapped {
+                unsafe { std::ptr::copy_nonoverlapping(data, dst, size as usize) };
+            }
             return;
         }
-        let staging_buffer = VBuffer::new(
+        let mut staging_buffer = VBuffer::new(
             v_device,
             v_physical_device,
             v_memory_manager,
@@ -109,13 +118,23 @@ impl VBuffer {
                     | vk::MemoryPropertyFlags::HOST_COHERENT,
             },
         );
-        staging_buffer.copy_to_buffer(v_device, v_physical_device, v_memory_manager, data, size);
+        staging_buffer.copy_to_buffer(
+            v_device,
+            v_physical_device,
+            v_memory_manager,
+            offset,
+            size,
+            data,
+        );
         v_memory_manager.run_single_cmd_submit(v_device, false, |cmd| {
-            let copy_regions = [vk::BufferCopy::default().size(size)];
+            let copy_regions = [vk::BufferCopy::default().dst_offset(offset).size(size)];
             unsafe {
-                v_device
-                    .device
-                    .cmd_copy_buffer(cmd, staging_buffer.buffer, self.buffer, &copy_regions);
+                v_device.device.cmd_copy_buffer(
+                    cmd,
+                    staging_buffer.buffer,
+                    self.buffer,
+                    &copy_regions,
+                );
             }
         });
         staging_buffer.destroy(v_device, v_memory_manager);
@@ -128,5 +147,3 @@ impl VBuffer {
         }
     }
 }
-
-

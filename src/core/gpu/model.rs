@@ -18,7 +18,7 @@ pub struct Model {
 
 impl Model {
     pub fn new(v_backend: &VBackend, vertices: &[Vertex3D], indices: &[u32]) -> Self {
-        let v_buffer = VBuffer::new(
+        let mut v_buffer = VBuffer::new(
             &v_backend.v_device,
             &v_backend.v_physical_device,
             &v_backend.v_memory_manager,
@@ -35,11 +35,12 @@ impl Model {
             &v_backend.v_device,
             &v_backend.v_physical_device,
             &v_backend.v_memory_manager,
-            vertices_data_ptr,
+            0,
             v_buffer.config.size,
+            vertices_data_ptr,
         );
 
-        let i_buffer = VBuffer::new(
+        let mut i_buffer = VBuffer::new(
             &v_backend.v_device,
             &v_backend.v_physical_device,
             &v_backend.v_memory_manager,
@@ -56,8 +57,9 @@ impl Model {
             &v_backend.v_device,
             &v_backend.v_physical_device,
             &v_backend.v_memory_manager,
-            indices_data_ptr,
+            0,
             i_buffer.config.size,
+            indices_data_ptr,
         );
 
         Self {
@@ -89,10 +91,7 @@ impl Model {
                     mesh.normals[3 * i + 1],
                     mesh.normals[3 * i + 2],
                 ],
-                uv: [
-                    mesh.texcoords[2 * i],
-                    mesh.texcoords[2 * 1 + 1],
-                ],
+                uv: [mesh.texcoords[2 * i], mesh.texcoords[2 * 1 + 1]],
             });
         }
 
