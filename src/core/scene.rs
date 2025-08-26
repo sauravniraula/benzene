@@ -141,7 +141,7 @@ impl Scene {
             is_extent_dirty: false,
             has_point_light_3d_changed: false,
             current_extent: v_backend.v_swapchain.image_extent,
-            ambient_color: Vector4::new(0.1, 0.1, 0.1, 0.2),
+            ambient_color: Vector4::new(0.1, 0.1, 0.1, 0.15),
         }
     }
 

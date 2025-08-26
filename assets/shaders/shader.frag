@@ -22,6 +22,7 @@ layout(location = 0) out vec4 out_color;
 
 void main() {
   vec3 base_color = in_color;
+  // vec3 base_color = texture(texture_sampler, in_uv).xyz;
 
   vec3 accum = vec3(0.0);
 
@@ -40,6 +41,5 @@ void main() {
   // Ambient term
   vec3 ambient = gu.ambient_color.xyz * gu.ambient_color.w * base_color;
 
-  // vec4 sampled_color = texture(texture_sampler, in_uv);
   out_color = vec4(ambient + accum, 1.0);
 }
