@@ -8,7 +8,6 @@ use crate::vulkan_backend::{
 };
 
 pub struct PointLightUniformObject {
-    // std140 requires vec4 alignment/stride for arrays. The w component is used as a flag/intensity.
     pub points: [Vector4<f32>; 16],
     pub colors: [Vector4<f32>; 16],
 }
@@ -24,9 +23,12 @@ impl PointLightUniform {
             &v_backend.v_physical_device,
             &v_backend.v_memory_manager,
         );
-        uniform_buffer
-            .v_buffer
-            .map_memory(&v_backend.v_device, &v_backend.v_memory_manager);
+        uniform_buffer.v_buffer.v_memory.map(
+            &v_backend.v_device,
+            &v_backend.v_memory_manager,
+            0,
+            uniform_buffer.v_buffer.config.size,
+        );
 
         Self { uniform_buffer }
     }
@@ -45,8 +47,8 @@ impl PointLightUniform {
     }
 
     pub fn upload(&mut self, data: &PointLightUniformObject) {
-        self.uniform_buffer
-            .copy(data as *const PointLightUniformObject as *const u8);
+        // self.uniform_buffer
+        //     .copy(data as *const PointLightUniformObject as *const u8);
     }
 
     pub fn destroy(&self, v_backend: &VBackend) {

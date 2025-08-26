@@ -66,23 +66,6 @@ impl VBuffer {
         }
     }
 
-    pub fn map_memory(
-        &mut self,
-        v_device: &VDevice,
-        v_memory_manager: &VMemoryManager,
-    ) -> VMemoryState {
-        self.v_memory
-            .map(v_device, v_memory_manager, 0, self.config.size)
-    }
-
-    pub fn unmap_memory(
-        &mut self,
-        v_device: &VDevice,
-        v_memory_manager: &VMemoryManager,
-    ) -> VMemoryState {
-        self.v_memory.unmap(v_device, v_memory_manager)
-    }
-
     pub fn is_host_visible(&self) -> bool {
         self.config
             .memory_property
@@ -99,6 +82,18 @@ impl VBuffer {
         data: *const u8,
     ) {
         if self.is_host_visible() {
+            if let VMemoryState::MAPPED(_offset, _size, _dst) = self.v_memory.state {
+                if _offset <= offset && _offset + _size >= offset + size {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            data,
+                            _dst.add((offset - _offset) as usize),
+                            size as usize,
+                        )
+                    };
+                    return;
+                }
+            }
             let mapped = self.v_memory.map(v_device, v_memory_manager, offset, size);
             if let VMemoryState::MAPPED(_, __, dst) = mapped {
                 unsafe { std::ptr::copy_nonoverlapping(data, dst, size as usize) };

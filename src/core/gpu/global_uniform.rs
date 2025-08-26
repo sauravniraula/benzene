@@ -27,8 +27,12 @@ impl GlobalUniform {
                     &v_backend.v_physical_device,
                     &v_backend.v_memory_manager,
                 );
-                u.v_buffer
-                    .map_memory(&v_backend.v_device, &v_backend.v_memory_manager);
+                u.v_buffer.v_memory.map(
+                    &v_backend.v_device,
+                    &v_backend.v_memory_manager,
+                    0,
+                    u.v_buffer.config.size,
+                );
                 u
             })
             .collect();
@@ -57,7 +61,7 @@ impl GlobalUniform {
     }
 
     pub fn upload(&mut self, frame_index: usize, data: &GlobalUniformObject) {
-        self.uniform_buffers[frame_index].copy(data as *const GlobalUniformObject as *const u8);
+        // self.uniform_buffers[frame_index].copy(data as *const GlobalUniformObject as *const u8);
     }
 
     pub fn upload_all(&mut self, data: &GlobalUniformObject) {
