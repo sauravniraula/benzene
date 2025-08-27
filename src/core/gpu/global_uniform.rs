@@ -1,4 +1,5 @@
 use ash::vk;
+use memoffset::offset_of;
 use nalgebra::{Matrix4, Vector4};
 
 use crate::vulkan_backend::{
@@ -60,14 +61,42 @@ impl GlobalUniform {
         );
     }
 
-    pub fn upload(&mut self, frame_index: usize, data: &GlobalUniformObject) {
-        // self.uniform_buffers[frame_index].copy(data as *const GlobalUniformObject as *const u8);
+    pub fn update_view(&mut self, v_backend: &VBackend, index: usize, value: &Matrix4<f32>) {
+        self.uniform_buffers[index].copy_region(
+            &v_backend.v_device,
+            &v_backend.v_physical_device,
+            &v_backend.v_memory_manager,
+            offset_of!(GlobalUniformObject, view) as u64,
+            size_of::<Matrix4<f32>>() as u64,
+            value as *const Matrix4<f32> as *const u8,
+        );
     }
 
-    pub fn upload_all(&mut self, data: &GlobalUniformObject) {
-        for frame_index in 0..self.count {
-            self.upload(frame_index, data);
-        }
+    pub fn update_projection(&mut self, v_backend: &VBackend, index: usize, value: &Matrix4<f32>) {
+        self.uniform_buffers[index].copy_region(
+            &v_backend.v_device,
+            &v_backend.v_physical_device,
+            &v_backend.v_memory_manager,
+            offset_of!(GlobalUniformObject, projection) as u64,
+            size_of::<Matrix4<f32>>() as u64,
+            value as *const Matrix4<f32> as *const u8,
+        );
+    }
+
+    pub fn update_ambient_color(
+        &mut self,
+        v_backend: &VBackend,
+        index: usize,
+        value: &Vector4<f32>,
+    ) {
+        self.uniform_buffers[index].copy_region(
+            &v_backend.v_device,
+            &v_backend.v_physical_device,
+            &v_backend.v_memory_manager,
+            offset_of!(GlobalUniformObject, ambient_color) as u64,
+            size_of::<Vector4<f32>>() as u64,
+            value as *const Vector4<f32> as *const u8,
+        );
     }
 
     pub fn destroy(&self, v_backend: &VBackend) {

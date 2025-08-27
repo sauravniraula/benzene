@@ -7,10 +7,7 @@ use crate::{
         gpu::{recordable::Recordable, scene_render::SceneRender},
         scene::Scene,
     },
-    vulkan_backend::{
-        backend::VBackend,
-        rendering::info::VRenderInfo,
-    },
+    vulkan_backend::{backend::VBackend, rendering::info::VRenderInfo},
     window::{Window, WindowConfig},
 };
 
@@ -86,7 +83,7 @@ impl GameEngine {
 
         // Pre-render the scene
         if let Some(scene) = &mut self.active_scene {
-            scene.pre_render(dt.as_secs_f32());
+            scene.pre_render(&self.v_backend, dt.as_secs_f32());
         }
     }
 

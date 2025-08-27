@@ -5,7 +5,7 @@ use crate::vulkan_backend::{
     memory::VMemoryManager,
 };
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum VMemoryState {
     UNMAPPED,
     MAPPED(u64, u64, *mut u8),
@@ -58,7 +58,7 @@ impl VMemory {
                 }
                 self.unmap(v_device, v_memory_manager);
                 self.map(v_device, v_memory_manager, offset, size)
-            },
+            }
         }
     }
 

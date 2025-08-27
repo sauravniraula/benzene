@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::vulkan_backend::{
     device::{VDevice, VPhysicalDevice},
-    memory::{VBuffer, VBufferConfig, VMemoryManager, VMemoryState},
+    memory::{VBuffer, VBufferConfig, VMemoryManager},
 };
 use ash::vk;
 

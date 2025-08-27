@@ -11,7 +11,7 @@ use crate::{
             types::EntityId,
         },
         gpu::{
-            global_uniform::{GlobalUniform, GlobalUniformObject},
+            global_uniform::GlobalUniform,
             point_light_uniform::{PointLightUniform, PointLightUniformObject},
             recordable::{Drawable, RecordContext, Recordable},
             scene_render::SceneRender,
@@ -124,7 +124,7 @@ impl Scene {
             batch.flush(&v_backend.v_device);
         }
 
-        Self {
+        let mut scene = Self {
             descriptor_pool,
             global_uniform_sets,
             point_light_sets,
@@ -142,7 +142,13 @@ impl Scene {
             has_point_light_3d_changed: false,
             current_extent: v_backend.v_swapchain.image_extent,
             ambient_color: Vector4::new(0.1, 0.1, 0.1, 0.15),
-        }
+        };
+
+        scene
+            .global_uniform
+            .update_ambient_color(v_backend, 0, &scene.ambient_color);
+
+        scene
     }
 
     pub fn handle_window_event(&mut self, event: &WindowEvent) {
@@ -195,8 +201,8 @@ impl Scene {
         self.structure_3d_components.insert(id, structure);
     }
 
-    pub fn pre_render(&mut self, dt: f32) {
-        self.update_global_uniform(dt);
+    pub fn pre_render(&mut self, v_backend: &VBackend, dt: f32) {
+        self.update_global_uniform(v_backend, dt);
 
         // Update dirty Transforms 3D
         for t in self.transform_3d_components.values_mut() {
@@ -206,10 +212,10 @@ impl Scene {
         }
 
         // Update point light uniform if needed
-        self.update_point_light_uniform();
+        self.update_point_light_uniform(v_backend);
     }
 
-    pub fn update_global_uniform(&mut self, dt: f32) {
+    pub fn update_global_uniform(&mut self, v_backend: &VBackend, dt: f32) {
         if let Some(active_camera_id) = self.active_camera {
             let camera_3d = self
                 .camera_3d_components
@@ -220,17 +226,14 @@ impl Scene {
                 camera_3d_compute_transform(camera_3d, dt);
                 let (view, projection) =
                     get_camera_3d_view_projection(camera_3d, self.current_extent);
-                let gbo = GlobalUniformObject {
-                    view,
-                    projection,
-                    ambient_color: self.ambient_color,
-                };
-                self.global_uniform.upload_all(&gbo);
+                self.global_uniform.update_view(v_backend, 0, &view);
+                self.global_uniform
+                    .update_projection(v_backend, 0, &projection);
             }
         }
     }
 
-    pub fn update_point_light_uniform(&mut self) {
+    pub fn update_point_light_uniform(&mut self, v_backend: &VBackend) {
         if self.has_point_light_3d_changed {
             let mut points: [Vector4<f32>; 16] = [Vector4::new(0.0, 0.0, 0.0, 0.0); 16];
             let mut colors: [Vector4<f32>; 16] = [Vector4::new(0.0, 0.0, 0.0, 0.0); 16];
@@ -252,7 +255,7 @@ impl Scene {
             }
 
             let ubo = PointLightUniformObject { points, colors };
-            self.point_light_uniform.upload(&ubo);
+            self.point_light_uniform.upload(v_backend, &ubo);
 
             self.has_point_light_3d_changed = false;
         }
