@@ -30,20 +30,6 @@ fn main() {
     scene.set_active_camera(&camera_entity);
 
     // Point Light
-    scene.add_game_object(red_light_entity.clone());
-    scene.add_transform_3d_component(
-        &red_light_entity,
-        Transform3D::new(
-            Vector3::new(2.0, 2.0, 0.0),
-            Vector3::new(0.0, 0.0, 0.0),
-            Vector3::new(1.0, 1.0, 1.0),
-        ),
-    );
-    scene.add_point_light_3d_component(
-        &red_light_entity,
-        PointLight3D::new(Vector4::new(1.0, 0.0, 0.0, 1.0)),
-    );
-
     scene.add_game_object(sun.clone());
     scene.add_transform_3d_component(
         &sun,
@@ -56,6 +42,20 @@ fn main() {
     scene.add_point_light_3d_component(
         &sun,
         PointLight3D::new(Vector4::new(1.0, 0.95, 0.8, 5000.0)),
+    );
+
+    scene.add_game_object(red_light_entity.clone());
+    scene.add_transform_3d_component(
+        &red_light_entity,
+        Transform3D::new(
+            Vector3::new(2.0, 2.0, 0.0),
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(1.0, 1.0, 1.0),
+        ),
+    );
+    scene.add_point_light_3d_component(
+        &red_light_entity,
+        PointLight3D::new(Vector4::new(1.0, 0.0, 0.0, 1.0)),
     );
 
     // Plane

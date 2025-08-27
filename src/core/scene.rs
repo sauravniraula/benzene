@@ -12,7 +12,7 @@ use crate::{
         },
         gpu::{
             global_uniform::GlobalUniform,
-            point_light_uniform::{PointLightUniform, PointLightUniformObject},
+            point_light_uniform::PointLightUniform,
             recordable::{Drawable, RecordContext, Recordable},
             scene_render::SceneRender,
             texture::ImageTexture,
@@ -235,9 +235,6 @@ impl Scene {
 
     pub fn update_point_light_uniform(&mut self, v_backend: &VBackend) {
         if self.has_point_light_3d_changed {
-            let mut points: [Vector4<f32>; 16] = [Vector4::new(0.0, 0.0, 0.0, 0.0); 16];
-            let mut colors: [Vector4<f32>; 16] = [Vector4::new(0.0, 0.0, 0.0, 0.0); 16];
-
             let mut index: usize = 0;
             for (entity_id, point_light) in self.point_light_3d_components.iter() {
                 if index >= 16 {
@@ -246,17 +243,12 @@ impl Scene {
 
                 if let Some(light_transform) = self.transform_3d_components.get(entity_id) {
                     let p = light_transform.position;
-                    points[index] = Vector4::new(p.x, p.y, p.z, 1.0);
+                    let point = Vector4::new(p.x, p.y, p.z, 1.0);
+                    self.point_light_uniform
+                        .update(v_backend, index, &point, &point_light.color);
                 }
-
-                colors[index] = point_light.color;
-
                 index += 1;
             }
-
-            let ubo = PointLightUniformObject { points, colors };
-            self.point_light_uniform.upload(v_backend, &ubo);
-
             self.has_point_light_3d_changed = false;
         }
     }

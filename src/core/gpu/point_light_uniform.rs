@@ -1,4 +1,5 @@
 use ash::vk;
+use memoffset::offset_of;
 use nalgebra::Vector4;
 
 use crate::vulkan_backend::{
@@ -46,7 +47,34 @@ impl PointLightUniform {
         );
     }
 
-    pub fn upload(&mut self, v_backend: &VBackend, data: &PointLightUniformObject) {
+    pub fn update(
+        &mut self,
+        v_backend: &VBackend,
+        index: usize,
+        point: &Vector4<f32>,
+        color: &Vector4<f32>,
+    ) {
+        let vec4_size = size_of::<Vector4<f32>>();
+
+        self.uniform_buffer.copy_region(
+            &v_backend.v_device,
+            &v_backend.v_physical_device,
+            &v_backend.v_memory_manager,
+            (offset_of!(PointLightUniformObject, points) + index * vec4_size) as u64,
+            vec4_size as u64,
+            point as *const Vector4<f32> as *const u8,
+        );
+        self.uniform_buffer.copy_region(
+            &v_backend.v_device,
+            &v_backend.v_physical_device,
+            &v_backend.v_memory_manager,
+            (offset_of!(PointLightUniformObject, colors) + index * vec4_size) as u64,
+            vec4_size as u64,
+            color as *const Vector4<f32> as *const u8,
+        );
+    }
+
+    pub fn update_all(&mut self, v_backend: &VBackend, data: &PointLightUniformObject) {
         self.uniform_buffer.copy_region(
             &v_backend.v_device,
             &v_backend.v_physical_device,
