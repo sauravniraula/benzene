@@ -18,10 +18,9 @@ impl VDescriptorSets {
     pub fn new(
         v_device: &VDevice,
         v_pool: &VDescriptorPool,
-        v_layout: &VDescriptorSetLayout,
-        count: usize,
+        v_layouts: &[VDescriptorSetLayout],
     ) -> Self {
-        let layouts: Vec<vk::DescriptorSetLayout> = (0..count).map(|_| v_layout.layout).collect();
+        let layouts: Vec<vk::DescriptorSetLayout> = v_layouts.iter().map(|l| l.layout).collect();
         let alloc_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(v_pool.pool)
             .set_layouts(&layouts);
@@ -33,20 +32,21 @@ impl VDescriptorSets {
                 .expect("failed to allocate descriptor sets")
         };
 
-        Self { sets, count }
+        Self { sets, count: layouts.len() }
     }
 
     pub fn queue_buffer(
         &self,
         batch: &mut VDescriptorWriteBatch,
-        binding: usize,
+        set_index: usize,
+        binding: u32,
         descriptor_type: vk::DescriptorType,
         v_buffer: &VBuffer,
     ) {
-        assert!(binding < self.count, "set_index out of range");
+        assert!(set_index < self.count, "set_index out of range");
         batch.queue_buffer(
-            self.sets[binding],
-            binding as u32,
+            self.sets[set_index],
+            binding,
             descriptor_type,
             v_buffer.buffer,
             vk::WHOLE_SIZE,
@@ -56,7 +56,7 @@ impl VDescriptorSets {
     pub fn queue_buffer_all(
         &self,
         batch: &mut VDescriptorWriteBatch,
-        binding: Option<usize>,
+        binding: u32,
         descriptor_type: vk::DescriptorType,
         v_buffers: &[&VBuffer],
     ) {
@@ -69,11 +69,7 @@ impl VDescriptorSets {
             if index == self.count {
                 break;
             }
-            let _binding = match binding {
-                Some(_b) => _b,
-                _ => index,
-            };
-            self.queue_buffer(batch, _binding, descriptor_type, v_buffers[index]);
+            self.queue_buffer(batch, index, binding, descriptor_type, v_buffers[index]);
             index += 1;
         }
     }
@@ -81,16 +77,17 @@ impl VDescriptorSets {
     pub fn queue_image(
         &self,
         batch: &mut VDescriptorWriteBatch,
-        binding: usize,
+        set_index: usize,
+        binding: u32,
         descriptor_type: vk::DescriptorType,
         v_image_view: &VImageView,
         v_sampler: &VSampler,
         image_layout: vk::ImageLayout,
     ) {
-        assert!(binding < self.count, "set_index out of range");
+        assert!(set_index < self.count, "set_index out of range");
         batch.queue_image(
-            self.sets[binding],
-            binding as u32,
+            self.sets[set_index],
+            binding,
             descriptor_type,
             v_image_view.image_view,
             v_sampler.sampler,
@@ -101,7 +98,7 @@ impl VDescriptorSets {
     pub fn queue_image_all(
         &self,
         batch: &mut VDescriptorWriteBatch,
-        binding: Option<usize>,
+        binding: u32,
         descriptor_type: vk::DescriptorType,
         v_image_views: &[&VImageView],
         v_samplers: &[&VSampler],
@@ -116,13 +113,10 @@ impl VDescriptorSets {
             if index == self.count {
                 break;
             }
-            let _binding = match binding {
-                Some(_b) => _b,
-                _ => index,
-            };
             self.queue_image(
                 batch,
-                _binding,
+                index,
+                binding,
                 descriptor_type,
                 v_image_views[index],
                 v_samplers[index],

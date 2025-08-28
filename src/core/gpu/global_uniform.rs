@@ -49,15 +49,11 @@ impl GlobalUniform {
         sets: &VDescriptorSets,
         batch: &mut VDescriptorWriteBatch,
     ) {
-        sets.queue_buffer_all(
-            batch,
-            None,
-            vk::DescriptorType::UNIFORM_BUFFER,
-            &self
-                .uniform_buffers
-                .iter()
-                .map(|e| &e.v_buffer)
-                .collect::<Vec<_>>(),
+        sets.queue_buffer_all(batch, 0, vk::DescriptorType::UNIFORM_BUFFER, &self
+            .uniform_buffers
+            .iter()
+            .map(|e| &e.v_buffer)
+            .collect::<Vec<_>>()
         );
     }
 

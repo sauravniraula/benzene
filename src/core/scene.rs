@@ -92,20 +92,17 @@ impl Scene {
         let global_uniform_sets = VDescriptorSets::new(
             &v_backend.v_device,
             &default_descriptor_pool,
-            &scene_render.descriptor_sets_layouts[0],
-            1,
+            &scene_render.descriptor_sets_layouts[0..1],
         );
         let point_light_sets = VDescriptorSets::new(
             &v_backend.v_device,
             &default_descriptor_pool,
-            &scene_render.descriptor_sets_layouts[1],
-            1,
+            &scene_render.descriptor_sets_layouts[1..2],
         );
         let default_texture_sets = VDescriptorSets::new(
             &v_backend.v_device,
             &default_descriptor_pool,
-            &scene_render.descriptor_sets_layouts[2],
-            1,
+            &scene_render.descriptor_sets_layouts[2..3],
         );
 
         // Attaching to descriptor sets

@@ -41,8 +41,7 @@ impl MaterialsManager {
         self.descriptor_sets.push(VDescriptorSets::new(
             v_device,
             &self.descriptor_pool,
-            v_layout,
-            1,
+            std::slice::from_ref(v_layout),
         ));
         return self.descriptor_sets.len() - 1;
     }
