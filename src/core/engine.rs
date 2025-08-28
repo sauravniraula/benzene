@@ -3,18 +3,27 @@ use std::time::Instant;
 
 use crate::{
     core::{
-        ecs::components::Structure3D,
-        gpu::{recordable::Recordable, scene_render::SceneRender},
+        ecs::components::{Material3D, Structure3D},
+        gpu::{
+            materials_manager::MaterialsManager, recordable::Recordable, scene_render::SceneRender,
+            texture::ImageTexture,
+        },
         scene::Scene,
     },
-    vulkan_backend::{backend::VBackend, rendering::info::VRenderInfo},
+    vulkan_backend::{
+        backend::VBackend, descriptor::VDescriptorWriteBatch, rendering::info::VRenderInfo,
+    },
     window::{Window, WindowConfig},
 };
 
 pub struct GameEngine {
+    // Resources
     window: Window,
     v_backend: VBackend,
     scene_render: SceneRender,
+    materials_manager: MaterialsManager,
+
+    // State
     active_scene: Option<Scene>,
     last_frame_instant: Instant,
 }
@@ -24,11 +33,13 @@ impl GameEngine {
         let window = Window::new(WindowConfig::default());
         let v_backend = VBackend::new(&window);
         let scene_render = SceneRender::new(&v_backend);
+        let materials_manager = MaterialsManager::new(&v_backend.v_device);
 
         let engine = Self {
             window,
             v_backend,
             scene_render,
+            materials_manager,
             active_scene: None,
             last_frame_instant: Instant::now(),
         };
@@ -43,8 +54,25 @@ impl GameEngine {
         self.active_scene = Some(scene);
     }
 
-    pub fn get_structure_from_obj(&self, obj_path: &str) -> Structure3D {
+    pub fn get_structure_3d_from_obj(&self, obj_path: &str) -> Structure3D {
         Structure3D::from_obj(&self.v_backend, obj_path)
+    }
+
+    pub fn get_material_3d_from_texture(&mut self, color: ImageTexture) -> Material3D {
+        let allocated_sets_index = self.materials_manager.allocate_material(
+            &self.v_backend.v_device,
+            &self.scene_render.descriptor_sets_layouts[3],
+        );
+
+        color.queue_descriptor_writes(
+            &self.materials_manager.descriptor_sets[allocated_sets_index],
+            &mut VDescriptorWriteBatch::new(),
+        );
+
+        Material3D {
+            color_texture: Some(color),
+            manager_index: allocated_sets_index,
+        }
     }
 
     pub fn run(&mut self) {
@@ -117,6 +145,7 @@ impl GameEngine {
             scene.destroy(&self.v_backend);
         }
         self.scene_render.destroy(&self.v_backend.v_device);
+        self.materials_manager.destroy(&self.v_backend.v_device);
         self.v_backend.destroy();
     }
 }

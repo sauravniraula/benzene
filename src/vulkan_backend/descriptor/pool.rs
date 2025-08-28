@@ -8,7 +8,7 @@ pub struct VDescriptorPool {
 }
 
 impl VDescriptorPool {
-    pub fn new(v_device: &VDevice, config: &VDescriptorPoolConfig) -> Self {
+    pub fn new(v_device: &VDevice, config: VDescriptorPoolConfig) -> Self {
         let pool_sizes: Vec<vk::DescriptorPoolSize> = config
             .types
             .iter()

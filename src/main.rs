@@ -59,7 +59,7 @@ fn main() {
     );
 
     // Plane
-    let plane: Structure3D = game_engine.get_structure_from_obj("assets/models/plane.obj");
+    let plane: Structure3D = game_engine.get_structure_3d_from_obj("assets/models/plane.obj");
     scene.add_game_object(plane_entity.clone());
     scene.add_transform_3d_component(
         &plane_entity,
@@ -73,7 +73,7 @@ fn main() {
 
     // Smooth Vase
     let smooth_vase: Structure3D =
-        game_engine.get_structure_from_obj("assets/models/vase-smooth.obj");
+        game_engine.get_structure_3d_from_obj("assets/models/vase-smooth.obj");
     scene.add_game_object(smooth_vase_entity.clone());
     scene.add_transform_3d_component(
         &smooth_vase_entity,

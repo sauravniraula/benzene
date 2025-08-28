@@ -51,7 +51,7 @@ impl GlobalUniform {
     ) {
         sets.queue_buffer_all(
             batch,
-            0,
+            None,
             vk::DescriptorType::UNIFORM_BUFFER,
             &self
                 .uniform_buffers

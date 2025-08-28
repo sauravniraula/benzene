@@ -1,8 +1,7 @@
 use crate::{
-    constants::MAX_FRAMES_IN_FLIGHT,
     core::{
         ecs::{
-            components::{Camera3D, PointLight3D, Structure3D, Transform3D},
+            components::{Camera3D, Material3D, PointLight3D, Structure3D, Transform3D},
             entities::game_object::GameObject,
             systems::{
                 camera_3d_compute_transform, camera_3d_handle_window_event,
@@ -34,8 +33,9 @@ use nalgebra::Vector4;
 use std::collections::HashMap;
 
 pub struct Scene {
-    descriptor_pool: VDescriptorPool,
-    // Descriptor Sets
+    default_descriptor_pool: VDescriptorPool,
+
+    // Default Descriptor Sets
     pub global_uniform_sets: VDescriptorSets,
     pub point_light_sets: VDescriptorSets,
     pub image_sampler_sets: VDescriptorSets,
@@ -49,6 +49,7 @@ pub struct Scene {
     camera_3d_components: HashMap<EntityId, Camera3D>,
     point_light_3d_components: HashMap<EntityId, PointLight3D>,
     structure_3d_components: HashMap<EntityId, Structure3D>,
+    material_3d_components: HashMap<EntityId, Material3D>,
 
     // Defaults
     texture: ImageTexture,
@@ -64,14 +65,13 @@ pub struct Scene {
 
 impl Scene {
     pub fn new(v_backend: &VBackend, scene_render: &SceneRender) -> Self {
-        // Create descriptor pool using new config model
-        let descriptor_pool = VDescriptorPool::new(
+        // Default descriptor pool
+        let default_descriptor_pool = VDescriptorPool::new(
             &v_backend.v_device,
-            &VDescriptorPoolConfig {
+            VDescriptorPoolConfig {
                 types: vec![
                     VDescriptorPoolTypeConfig {
                         descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                        // count: MAX_FRAMES_IN_FLIGHT as u32,
                         count: 1,
                     },
                     VDescriptorPoolTypeConfig {
@@ -83,26 +83,26 @@ impl Scene {
                         count: 1,
                     },
                 ],
-                max_sets: (MAX_FRAMES_IN_FLIGHT + 1) as u32,
+                max_sets: 3 as u32,
             },
         );
 
         // Create defautl descriptor sets
         let global_uniform_sets = VDescriptorSets::new(
             &v_backend.v_device,
-            &descriptor_pool,
+            &default_descriptor_pool,
             &scene_render.descriptor_sets_layouts[0],
             1,
         );
         let point_light_sets = VDescriptorSets::new(
             &v_backend.v_device,
-            &descriptor_pool,
+            &default_descriptor_pool,
             &scene_render.descriptor_sets_layouts[1],
             1,
         );
         let image_sampler_sets = VDescriptorSets::new(
             &v_backend.v_device,
-            &descriptor_pool,
+            &default_descriptor_pool,
             &scene_render.descriptor_sets_layouts[2],
             1,
         );
@@ -125,7 +125,7 @@ impl Scene {
         }
 
         let mut scene = Self {
-            descriptor_pool,
+            default_descriptor_pool,
             global_uniform_sets,
             point_light_sets,
             image_sampler_sets,
@@ -137,6 +137,7 @@ impl Scene {
             camera_3d_components: HashMap::new(),
             point_light_3d_components: HashMap::new(),
             structure_3d_components: HashMap::new(),
+            material_3d_components: HashMap::new(),
             texture,
             is_extent_dirty: false,
             has_point_light_3d_changed: false,
@@ -260,7 +261,7 @@ impl Scene {
             structure.destroy(v_backend);
         }
         self.texture.destroy(v_backend);
-        self.descriptor_pool.destroy(&v_backend.v_device);
+        self.default_descriptor_pool.destroy(&v_backend.v_device);
     }
 }
 

@@ -41,7 +41,7 @@ impl PointLightUniform {
     ) {
         sets.queue_buffer_all(
             batch,
-            0,
+            None,
             vk::DescriptorType::UNIFORM_BUFFER,
             &[&self.uniform_buffer.v_buffer],
         );
