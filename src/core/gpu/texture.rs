@@ -35,7 +35,53 @@ impl ImageTexture {
                 v_backend.v_device.buffer_sharing_mode,
                 Some(v_backend.v_device.buffer_queue_family_indices.clone()),
                 vk::MemoryPropertyFlags::DEVICE_LOCAL,
-                vk::Format::R8G8B8A8_SRGB,
+                format,
+            ),
+        );
+
+        v_image.copy_to_image(
+            &v_backend.v_device,
+            &v_backend.v_physical_device,
+            &v_backend.v_memory_manager,
+            image_rgba.as_ptr(),
+            image_size,
+        );
+        let image_view = VImageView::new_2d(
+            &v_backend.v_device,
+            &v_image,
+            vk::ImageAspectFlags::COLOR,
+            format,
+        );
+        let sampler = VSampler::new(&v_backend.v_device, &v_backend.v_physical_device);
+        Self {
+            image: v_image,
+            image_view,
+            sampler,
+        }
+    }
+
+    // 1x1 white texture.
+    pub fn empty(v_backend: &VBackend, format: vk::Format) -> Self {
+        let image_extent = Extent3D {
+            width: 1,
+            height: 1,
+            depth: 1,
+        };
+        let image_size = 4u64;
+        let image_rgba: [u8; 4] = [255, 255, 255, 255];
+
+        let v_image = VImage::new(
+            &v_backend.v_device,
+            &v_backend.v_physical_device,
+            &v_backend.v_memory_manager,
+            VImageConfig::image_2d(
+                image_extent,
+                image_size,
+                vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
+                v_backend.v_device.buffer_sharing_mode,
+                Some(v_backend.v_device.buffer_queue_family_indices.clone()),
+                vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                format,
             ),
         );
 

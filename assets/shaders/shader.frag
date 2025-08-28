@@ -21,8 +21,8 @@ layout(location = 3) in vec2 in_uv;
 layout(location = 0) out vec4 out_color;
 
 void main() {
-  vec3 base_color = in_color;
-  // vec3 base_color = texture(texture_sampler, in_uv).xyz;
+  // vec3 base_color = in_color;
+  vec3 base_color = texture(texture_sampler, in_uv).xyz;
 
   vec3 accum = vec3(0.0);
 

@@ -1,10 +1,7 @@
 use ash::vk;
 
 use crate::{
-    core::{
-        gpu::recordable::{RecordContext, Recordable},
-        model_push_constant::ModelPushConstant,
-    },
+    core::{gpu::materials_manager::MaterialsManager, model_push_constant::ModelPushConstant},
     vulkan_backend::{
         backend::VBackend,
         backend_event::VBackendEvent,
@@ -19,6 +16,22 @@ use crate::{
         vertex_input::{BindableVertexInput, Vertex3D},
     },
 };
+pub struct SceneRenderRecordContext<'a> {
+    pub v_device: &'a VDevice,
+    pub materials_manager: &'a MaterialsManager,
+    pub cmd: vk::CommandBuffer,
+    pub frame_index: usize,
+    pub pipeline_infos: &'a Vec<VPipelineInfo>,
+    pub descriptor_sets_layouts: &'a Vec<VDescriptorSetLayout>,
+}
+
+pub trait SceneRenderRecordable {
+    fn record(&self, ctx: &SceneRenderRecordContext);
+}
+
+pub trait SceneRenderDrawable {
+    fn draw(&self, v_device: &VDevice, command_buffer: vk::CommandBuffer);
+}
 
 pub struct SceneRender {
     v_rendering_system: VRenderingSystem,
@@ -102,7 +115,13 @@ impl SceneRender {
         }
     }
 
-    pub fn render(&self, v_device: &VDevice, info: &VRenderInfo, recordables: &[&dyn Recordable]) {
+    pub fn render(
+        &self,
+        v_device: &VDevice,
+        materials_manager: &MaterialsManager,
+        info: &VRenderInfo,
+        recordables: &[&dyn SceneRenderRecordable],
+    ) {
         self.v_rendering_system.start(v_device, info);
         unsafe {
             v_device.device.cmd_bind_pipeline(
@@ -112,8 +131,9 @@ impl SceneRender {
             )
         };
 
-        let ctx = RecordContext {
+        let ctx = SceneRenderRecordContext {
             v_device,
+            materials_manager: materials_manager,
             cmd: info.command_buffer,
             frame_index: info.frame_index,
             pipeline_infos: &self.pipeline_infos,

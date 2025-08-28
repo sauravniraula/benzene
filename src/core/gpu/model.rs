@@ -1,7 +1,7 @@
 use ash::vk;
 
 use crate::{
-    core::gpu::recordable::Drawable,
+    core::gpu::scene_render::SceneRenderDrawable,
     vulkan_backend::{
         backend::VBackend,
         device::VDevice,
@@ -106,7 +106,7 @@ impl Model {
     }
 }
 
-impl Drawable for Model {
+impl SceneRenderDrawable for Model {
     fn draw(&self, v_device: &VDevice, command_buffer: vk::CommandBuffer) {
         unsafe {
             let vertex_buffers = [self.v_buffer.buffer];

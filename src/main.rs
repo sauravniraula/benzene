@@ -4,6 +4,7 @@ use benzene::core::{
         components::{Camera3D, PointLight3D, Structure3D, Transform3D},
         entities::game_object::GameObject,
     },
+    gpu::texture::ImageTexture,
 };
 use nalgebra::{Vector3, Vector4};
 
@@ -59,7 +60,10 @@ fn main() {
     );
 
     // Plane
-    let plane: Structure3D = game_engine.get_structure_3d_from_obj("assets/models/plane.obj");
+    let plane_structure = game_engine.get_structure_3d_from_obj("assets/models/plane.obj");
+    let dirt_texture =
+        game_engine.get_texture_from_image("assets/textures/cracked-dirt512x512.jpg");
+    let plane_material = game_engine.get_material_3d_from_texture(dirt_texture);
     scene.add_game_object(plane_entity.clone());
     scene.add_transform_3d_component(
         &plane_entity,
@@ -69,7 +73,8 @@ fn main() {
             Vector3::new(2.0, 1.0, 2.0),
         ),
     );
-    scene.add_structure_3d_component(&plane_entity, plane);
+    scene.add_structure_3d_component(&plane_entity, plane_structure);
+    scene.add_material_3d_component(&plane_entity, plane_material);
 
     // Smooth Vase
     let smooth_vase: Structure3D =

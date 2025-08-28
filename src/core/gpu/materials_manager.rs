@@ -9,7 +9,7 @@ use ash::vk;
 
 pub struct MaterialsManager {
     descriptor_pool: VDescriptorPool,
-    pub descriptor_sets: Vec<VDescriptorSets>,
+    descriptor_sets: Vec<VDescriptorSets>,
 }
 
 impl MaterialsManager {
@@ -27,6 +27,10 @@ impl MaterialsManager {
             ),
             descriptor_sets: vec![],
         }
+    }
+
+    pub fn get_sets_at(&self, index: usize) -> &VDescriptorSets {
+        return &self.descriptor_sets[index];
     }
 
     pub fn allocate_material(

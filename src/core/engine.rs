@@ -1,3 +1,4 @@
+use ash::vk;
 use glfw::{Action, Key, WindowEvent};
 use std::time::Instant;
 
@@ -5,7 +6,8 @@ use crate::{
     core::{
         ecs::components::{Material3D, Structure3D},
         gpu::{
-            materials_manager::MaterialsManager, recordable::Recordable, scene_render::SceneRender,
+            materials_manager::MaterialsManager,
+            scene_render::{SceneRender, SceneRenderRecordable},
             texture::ImageTexture,
         },
         scene::Scene,
@@ -58,16 +60,23 @@ impl GameEngine {
         Structure3D::from_obj(&self.v_backend, obj_path)
     }
 
-    pub fn get_material_3d_from_texture(&mut self, color: ImageTexture) -> Material3D {
+    pub fn get_texture_from_image(&self, image_path: &str) -> ImageTexture {
+        ImageTexture::new(&self.v_backend, image_path, vk::Format::R8G8B8A8_SRGB)
+    }
+
+    pub fn get_material_3d_from_texture<'a>(&mut self, color: ImageTexture) -> Material3D {
         let allocated_sets_index = self.materials_manager.allocate_material(
             &self.v_backend.v_device,
-            &self.scene_render.descriptor_sets_layouts[3],
+            &self.scene_render.descriptor_sets_layouts[2],
         );
 
+        let mut batch_writer = VDescriptorWriteBatch::new();
+
         color.queue_descriptor_writes(
-            &self.materials_manager.descriptor_sets[allocated_sets_index],
-            &mut VDescriptorWriteBatch::new(),
+            &self.materials_manager.get_sets_at(allocated_sets_index),
+            &mut batch_writer,
         );
+        batch_writer.flush(&self.v_backend.v_device);
 
         Material3D {
             color_texture: Some(color),
@@ -133,9 +142,13 @@ impl GameEngine {
 
     fn render_scene(&self, info: &VRenderInfo) {
         if let Some(scene) = &self.active_scene {
-            let recordables: [&dyn Recordable; 1] = [scene];
-            self.scene_render
-                .render(&self.v_backend.v_device, info, &recordables);
+            let recordables: [&dyn SceneRenderRecordable; 1] = [scene];
+            self.scene_render.render(
+                &self.v_backend.v_device,
+                &self.materials_manager,
+                info,
+                &recordables,
+            );
         }
     }
 

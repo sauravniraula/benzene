@@ -12,8 +12,9 @@ use crate::{
         gpu::{
             global_uniform::GlobalUniform,
             point_light_uniform::PointLightUniform,
-            recordable::{Drawable, RecordContext, Recordable},
-            scene_render::SceneRender,
+            scene_render::{
+                SceneRender, SceneRenderDrawable, SceneRenderRecordContext, SceneRenderRecordable,
+            },
             texture::ImageTexture,
         },
         model_push_constant::ModelPushConstant,
@@ -38,7 +39,7 @@ pub struct Scene {
     // Default Descriptor Sets
     pub global_uniform_sets: VDescriptorSets,
     pub point_light_sets: VDescriptorSets,
-    pub image_sampler_sets: VDescriptorSets,
+    pub default_texture_sets: VDescriptorSets,
 
     // ECS
     active_camera: Option<EntityId>,
@@ -100,7 +101,7 @@ impl Scene {
             &scene_render.descriptor_sets_layouts[1],
             1,
         );
-        let image_sampler_sets = VDescriptorSets::new(
+        let default_texture_sets = VDescriptorSets::new(
             &v_backend.v_device,
             &default_descriptor_pool,
             &scene_render.descriptor_sets_layouts[2],
@@ -110,16 +111,12 @@ impl Scene {
         // Attaching to descriptor sets
         let global_uniform = GlobalUniform::new(v_backend, 1);
         let point_light_uniform = PointLightUniform::new(v_backend);
-        let texture = ImageTexture::new(
-            v_backend,
-            "assets/textures/cracked-dirt512x512.jpg",
-            vk::Format::R8G8B8A8_SRGB,
-        );
+        let texture = ImageTexture::empty(v_backend, vk::Format::R8G8B8A8_SRGB);
         {
             let mut batch = VDescriptorWriteBatch::new();
             global_uniform.queue_descriptor_writes(&global_uniform_sets, &mut batch);
             point_light_uniform.queue_descriptor_writes(&point_light_sets, &mut batch);
-            texture.queue_descriptor_writes(&image_sampler_sets, &mut batch);
+            texture.queue_descriptor_writes(&default_texture_sets, &mut batch);
 
             batch.flush(&v_backend.v_device);
         }
@@ -128,7 +125,7 @@ impl Scene {
             default_descriptor_pool,
             global_uniform_sets,
             point_light_sets,
-            image_sampler_sets,
+            default_texture_sets,
             active_camera: None,
             global_uniform,
             point_light_uniform,
@@ -202,6 +199,11 @@ impl Scene {
         self.structure_3d_components.insert(id, structure);
     }
 
+    pub fn add_material_3d_component(&mut self, entity: &GameObject, material: Material3D) {
+        let id = *entity.get_id();
+        self.material_3d_components.insert(id, material);
+    }
+
     pub fn pre_render(&mut self, v_backend: &VBackend, dt: f32) {
         self.update_global_uniform(v_backend, dt);
 
@@ -257,16 +259,19 @@ impl Scene {
     pub fn destroy(&self, v_backend: &VBackend) {
         self.global_uniform.destroy(v_backend);
         self.point_light_uniform.destroy(v_backend);
-        for (_, structure) in self.structure_3d_components.iter() {
-            structure.destroy(v_backend);
+        for (_, structure_3d) in self.structure_3d_components.iter() {
+            structure_3d.destroy(v_backend);
+        }
+        for (_, material_3d) in self.material_3d_components.iter() {
+            material_3d.destroy(v_backend);
         }
         self.texture.destroy(v_backend);
         self.default_descriptor_pool.destroy(&v_backend.v_device);
     }
 }
 
-impl Recordable for Scene {
-    fn record(&self, ctx: &RecordContext) {
+impl SceneRenderRecordable for Scene {
+    fn record(&self, ctx: &SceneRenderRecordContext) {
         unsafe {
             ctx.v_device.device.cmd_bind_descriptor_sets(
                 ctx.cmd,
@@ -276,16 +281,42 @@ impl Recordable for Scene {
                 &[
                     self.global_uniform_sets.sets[0],
                     self.point_light_sets.sets[0],
-                    self.image_sampler_sets.sets[0],
                 ],
                 &[],
             );
         }
 
-        for (entity_id, structure) in self.structure_3d_components.iter() {
-            if let Some(transform3d) = self.transform_3d_components.get(entity_id) {
+        for (entity_id, structure_3d) in self.structure_3d_components.iter() {
+            if let Some(transform_3d) = self.transform_3d_components.get(entity_id) {
+                if let Some(material_3d) = self.material_3d_components.get(entity_id) {
+                    unsafe {
+                        ctx.v_device.device.cmd_bind_descriptor_sets(
+                            ctx.cmd,
+                            vk::PipelineBindPoint::GRAPHICS,
+                            ctx.pipeline_infos[0].layout,
+                            2,
+                            &[ctx
+                                .materials_manager
+                                .get_sets_at(material_3d.manager_index)
+                                .sets[0]],
+                            &[],
+                        );
+                    }
+                } else {
+                    unsafe {
+                        ctx.v_device.device.cmd_bind_descriptor_sets(
+                            ctx.cmd,
+                            vk::PipelineBindPoint::GRAPHICS,
+                            ctx.pipeline_infos[0].layout,
+                            2,
+                            &[self.default_texture_sets.sets[0]],
+                            &[],
+                        );
+                    }
+                }
+
                 let push = ModelPushConstant {
-                    transform: transform3d.cached_transform,
+                    transform: transform_3d.cached_transform,
                 };
                 let data = unsafe {
                     std::slice::from_raw_parts(
@@ -302,7 +333,7 @@ impl Recordable for Scene {
                         data,
                     );
                 }
-                structure.model.draw(ctx.v_device, ctx.cmd);
+                structure_3d.model.draw(ctx.v_device, ctx.cmd);
             }
         }
     }
