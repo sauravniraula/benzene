@@ -32,7 +32,10 @@ impl VDescriptorSets {
                 .expect("failed to allocate descriptor sets")
         };
 
-        Self { sets, count: layouts.len() }
+        Self {
+            sets,
+            count: layouts.len(),
+        }
     }
 
     pub fn queue_buffer(
@@ -53,7 +56,7 @@ impl VDescriptorSets {
         );
     }
 
-    pub fn queue_buffer_all(
+    pub fn queue_buffer_all_sets(
         &self,
         batch: &mut VDescriptorWriteBatch,
         binding: u32,
@@ -95,7 +98,7 @@ impl VDescriptorSets {
         );
     }
 
-    pub fn queue_image_all(
+    pub fn queue_image_all_sets(
         &self,
         batch: &mut VDescriptorWriteBatch,
         binding: u32,

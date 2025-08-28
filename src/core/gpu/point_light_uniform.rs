@@ -39,7 +39,7 @@ impl PointLightUniform {
         sets: &VDescriptorSets,
         batch: &mut VDescriptorWriteBatch,
     ) {
-        sets.queue_buffer_all(
+        sets.queue_buffer_all_sets(
             batch,
             0,
             vk::DescriptorType::UNIFORM_BUFFER,

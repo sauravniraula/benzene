@@ -115,7 +115,7 @@ impl ImageTexture {
             .map(|_| &self.image_view)
             .collect::<Vec<_>>();
         let samplers = (0..sets.count).map(|_| &self.sampler).collect::<Vec<_>>();
-        sets.queue_image_all(
+        sets.queue_image_all_sets(
             batch,
             0,
             vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
