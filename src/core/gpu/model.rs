@@ -91,7 +91,7 @@ impl Model {
                     mesh.normals[3 * i + 1],
                     mesh.normals[3 * i + 2],
                 ],
-                uv: [mesh.texcoords[2 * i], mesh.texcoords[2 * 1 + 1]],
+                uv: [mesh.texcoords[2 * i], mesh.texcoords[2 * i + 1]],
             });
         }
 

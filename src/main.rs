@@ -4,7 +4,6 @@ use benzene::core::{
         components::{Camera3D, PointLight3D, Structure3D, Transform3D},
         entities::game_object::GameObject,
     },
-    gpu::texture::ImageTexture,
 };
 use nalgebra::{Vector3, Vector4};
 
@@ -61,9 +60,9 @@ fn main() {
 
     // Plane
     let plane_structure = game_engine.get_structure_3d_from_obj("assets/models/plane.obj");
-    let dirt_texture =
-        game_engine.get_texture_from_image("assets/textures/cracked-dirt512x512.jpg");
-    let plane_material = game_engine.get_material_3d_from_texture(dirt_texture);
+    let dirt_texture_id =
+        game_engine.load_texture_from_image("assets/textures/cracked-dirt512x512.jpg");
+    let plane_material = game_engine.get_material_3d_from_texture_id(dirt_texture_id);
     scene.add_game_object(plane_entity.clone());
     scene.add_transform_3d_component(
         &plane_entity,

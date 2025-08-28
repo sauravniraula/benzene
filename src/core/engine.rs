@@ -1,5 +1,6 @@
 use ash::vk;
 use glfw::{Action, Key, WindowEvent};
+use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::{
@@ -18,14 +19,18 @@ use crate::{
     window::{Window, WindowConfig},
 };
 
+pub type TextureId = u64;
+
 pub struct GameEngine {
-    // Resources
+    // Core
     window: Window,
     v_backend: VBackend,
     scene_render: SceneRender,
     materials_manager: MaterialsManager,
 
     // State
+    textures: HashMap<TextureId, ImageTexture>,
+    next_texture_id: TextureId,
     active_scene: Option<Scene>,
     last_frame_instant: Instant,
 }
@@ -42,6 +47,8 @@ impl GameEngine {
             v_backend,
             scene_render,
             materials_manager,
+            textures: HashMap::new(),
+            next_texture_id: 1,
             active_scene: None,
             last_frame_instant: Instant::now(),
         };
@@ -60,11 +67,19 @@ impl GameEngine {
         Structure3D::from_obj(&self.v_backend, obj_path)
     }
 
-    pub fn get_texture_from_image(&self, image_path: &str) -> ImageTexture {
-        ImageTexture::new(&self.v_backend, image_path, vk::Format::R8G8B8A8_SRGB)
+    pub fn load_texture_from_image(&mut self, image_path: &str) -> TextureId {
+        let texture = ImageTexture::new(&self.v_backend, image_path, vk::Format::R8G8B8A8_SRGB);
+        let id = self.next_texture_id;
+        self.next_texture_id += 1;
+        self.textures.insert(id, texture);
+        id
     }
 
-    pub fn get_material_3d_from_texture<'a>(&mut self, color: ImageTexture) -> Material3D {
+    pub fn get_material_3d_from_texture_id(&mut self, texture_id: TextureId) -> Material3D {
+        let color = self
+            .textures
+            .get(&texture_id)
+            .expect("invalid texture id passed to get_material_3d_from_texture_id");
         let allocated_sets_index = self.materials_manager.allocate_material(
             &self.v_backend.v_device,
             &self.scene_render.descriptor_sets_layouts[2],
@@ -79,8 +94,13 @@ impl GameEngine {
         batch_writer.flush(&self.v_backend.v_device);
 
         Material3D {
-            color_texture: Some(color),
             manager_index: allocated_sets_index,
+        }
+    }
+
+    pub fn unload_texture(&mut self, texture_id: TextureId) {
+        if let Some(tex) = self.textures.remove(&texture_id) {
+            tex.destroy(&self.v_backend);
         }
     }
 
@@ -152,10 +172,14 @@ impl GameEngine {
         }
     }
 
-    pub fn destroy(&self) {
+    pub fn destroy(mut self) {
         self.v_backend.v_device.wait_till_idle();
         if let Some(scene) = &self.active_scene {
             scene.destroy(&self.v_backend);
+        }
+        // Destroy all engine-owned textures
+        for (_, tex) in self.textures.drain() {
+            tex.destroy(&self.v_backend);
         }
         self.scene_render.destroy(&self.v_backend.v_device);
         self.materials_manager.destroy(&self.v_backend.v_device);

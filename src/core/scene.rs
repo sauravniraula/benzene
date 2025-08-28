@@ -259,9 +259,6 @@ impl Scene {
         for (_, structure_3d) in self.structure_3d_components.iter() {
             structure_3d.destroy(v_backend);
         }
-        for (_, material_3d) in self.material_3d_components.iter() {
-            material_3d.destroy(v_backend);
-        }
         self.texture.destroy(v_backend);
         self.default_descriptor_pool.destroy(&v_backend.v_device);
     }
