@@ -1,25 +1,27 @@
 use ash::vk;
 use glfw::{Action, Key, WindowEvent};
-use std::collections::HashMap;
 use std::time::Instant;
+use std::{collections::HashMap, time::Duration};
 
 use crate::{
     core::{
-        ecs::components::{Material3D, Structure3D},
+        ecs::{
+            components::{Material3D, Structure3D},
+            types::Id,
+        },
         gpu::{
             materials_manager::MaterialsManager,
             scene_render::{SceneRender, SceneRenderRecordable},
             texture::ImageTexture,
         },
         scene::Scene,
+        utils::get_random_id,
     },
     vulkan_backend::{
         backend::VBackend, descriptor::VDescriptorWriteBatch, rendering::info::VRenderInfo,
     },
     window::{Window, WindowConfig},
 };
-
-pub type TextureId = u64;
 
 pub struct GameEngine {
     // Core
@@ -28,9 +30,10 @@ pub struct GameEngine {
     scene_render: SceneRender,
     materials_manager: MaterialsManager,
 
+    // Resources
+    textures: HashMap<Id, ImageTexture>,
+
     // State
-    textures: HashMap<TextureId, ImageTexture>,
-    next_texture_id: TextureId,
     active_scene: Option<Scene>,
     last_frame_instant: Instant,
 }
@@ -48,7 +51,6 @@ impl GameEngine {
             scene_render,
             materials_manager,
             textures: HashMap::new(),
-            next_texture_id: 1,
             active_scene: None,
             last_frame_instant: Instant::now(),
         };
@@ -59,6 +61,10 @@ impl GameEngine {
         Scene::new(&self.v_backend, &self.scene_render)
     }
 
+    pub fn get_active_scene(&mut self) -> &mut Scene {
+        self.active_scene.as_mut().unwrap()
+    }
+
     pub fn set_active_scene(&mut self, scene: Scene) {
         self.active_scene = Some(scene);
     }
@@ -67,18 +73,17 @@ impl GameEngine {
         Structure3D::from_obj(&self.v_backend, obj_path)
     }
 
-    pub fn load_texture_from_image(&mut self, image_path: &str) -> TextureId {
+    pub fn load_texture_from_image(&mut self, image_path: &str) -> Id {
         let texture = ImageTexture::new(&self.v_backend, image_path, vk::Format::R8G8B8A8_SRGB);
-        let id = self.next_texture_id;
-        self.next_texture_id += 1;
+        let id = get_random_id();
         self.textures.insert(id, texture);
         id
     }
 
-    pub fn get_material_3d_from_texture_id(&mut self, texture_id: TextureId) -> Material3D {
+    pub fn get_material_3d_from_texture(&mut self, texture: Id) -> Material3D {
         let color = self
             .textures
-            .get(&texture_id)
+            .get(&texture)
             .expect("invalid texture id passed to get_material_3d_from_texture_id");
         let allocated_sets_index = self.materials_manager.allocate_material(
             &self.v_backend.v_device,
@@ -98,13 +103,13 @@ impl GameEngine {
         }
     }
 
-    pub fn unload_texture(&mut self, texture_id: TextureId) {
-        if let Some(tex) = self.textures.remove(&texture_id) {
+    pub fn unload_texture(&mut self, texture: Id) {
+        if let Some(tex) = self.textures.remove(&texture) {
             tex.destroy(&self.v_backend);
         }
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self, on_pre_render: &mut impl FnMut(&mut GameEngine, Duration)) {
         self.window.pwindow.set_key_polling(true);
         self.window
             .pwindow
@@ -112,7 +117,7 @@ impl GameEngine {
         while !self.window.pwindow.should_close() {
             self.window.glfwi.poll_events();
             self.handle_window_events();
-            self.pre_render();
+            self.pre_render(on_pre_render);
             self.render();
         }
     }
@@ -133,10 +138,12 @@ impl GameEngine {
         }
     }
 
-    fn pre_render(&mut self) {
+    fn pre_render(&mut self, on_pre_render: &mut impl FnMut(&mut GameEngine, Duration)) {
         let current_instant = Instant::now();
         let dt = current_instant.duration_since(self.last_frame_instant);
         self.last_frame_instant = current_instant;
+
+        on_pre_render(self, dt);
 
         // Pre-render the scene
         if let Some(scene) = &mut self.active_scene {

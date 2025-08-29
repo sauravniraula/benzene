@@ -189,7 +189,7 @@ impl VRenderingSystem {
     pub fn start(&self, v_device: &VDevice, info: &VRenderInfo) {
         let mut clear_values = [vk::ClearValue::default(), vk::ClearValue::default()];
         clear_values[0].color = vk::ClearColorValue {
-            float32: [0.0, 0.0, 0.0, 1.0],
+            float32: [0.18, 0.22, 0.28, 1.0], // darker blue color
         };
         clear_values[1].depth_stencil = vk::ClearDepthStencilValue {
             depth: 1.0,

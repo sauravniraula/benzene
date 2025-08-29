@@ -1,17 +1,15 @@
-use rand::Rng;
-
-use crate::core::ecs::types::EntityId;
+use crate::core::ecs::types::Id;
 
 #[derive(Clone)]
 pub struct GameObject {
-    id: EntityId,
+    id: Id,
     pub name: String,
 }
 
 impl GameObject {
     pub fn new(name: &str) -> Self {
         return Self {
-            id: rand::rng().random(),
+            id: rand::random(),
             name: name.into(),
         };
     }

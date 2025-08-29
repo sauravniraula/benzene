@@ -7,7 +7,7 @@ use crate::{
                 camera_3d_compute_transform, camera_3d_handle_window_event,
                 get_camera_3d_view_projection, update_transform_3d_matrix,
             },
-            types::EntityId,
+            types::Id,
         },
         gpu::{
             global_uniform::GlobalUniform,
@@ -42,15 +42,15 @@ pub struct Scene {
     pub default_texture_sets: VDescriptorSets,
 
     // ECS
-    active_camera: Option<EntityId>,
+    active_camera: Option<Id>,
     global_uniform: GlobalUniform,
     point_light_uniform: PointLightUniform,
     entities: Vec<GameObject>,
-    transform_3d_components: HashMap<EntityId, Transform3D>,
-    camera_3d_components: HashMap<EntityId, Camera3D>,
-    point_light_3d_components: HashMap<EntityId, PointLight3D>,
-    structure_3d_components: HashMap<EntityId, Structure3D>,
-    material_3d_components: HashMap<EntityId, Material3D>,
+    transform_3d_components: HashMap<Id, Transform3D>,
+    camera_3d_components: HashMap<Id, Camera3D>,
+    point_light_3d_components: HashMap<Id, PointLight3D>,
+    structure_3d_components: HashMap<Id, Structure3D>,
+    material_3d_components: HashMap<Id, Material3D>,
 
     // Defaults
     texture: ImageTexture,
@@ -164,6 +164,12 @@ impl Scene {
         }
     }
 
+    pub fn get_transform_3d_component(&mut self, entity: &GameObject) -> &mut Transform3D {
+        self.transform_3d_components
+            .get_mut(entity.get_id())
+            .expect("failed to get transform 3d component from entity")
+    }
+
     pub fn add_game_object(&mut self, entity: GameObject) {
         self.entities.push(entity);
     }
@@ -204,10 +210,13 @@ impl Scene {
     pub fn pre_render(&mut self, v_backend: &VBackend, dt: f32) {
         self.update_global_uniform(v_backend, dt);
 
-        // Update dirty Transforms 3D
-        for t in self.transform_3d_components.values_mut() {
+        // Update dirty Transforms 3D and flag light uniform updates if any light moved
+        for (entity_id, t) in self.transform_3d_components.iter_mut() {
             if t.dirty {
                 update_transform_3d_matrix(t);
+                if self.point_light_3d_components.contains_key(entity_id) {
+                    self.has_point_light_3d_changed = true;
+                }
             }
         }
 

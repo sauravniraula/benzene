@@ -1,1 +1,1 @@
-pub type EntityId = [u8; 64];
+pub type Id = [u8; 64];
