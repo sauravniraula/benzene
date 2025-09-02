@@ -44,6 +44,7 @@ impl VSwapchain {
             .min_image_count(image_count)
             .image_extent(image_extent)
             .image_format(surface_format.format)
+            .present_mode(v_physical_device.select_present_mode())
             .image_color_space(surface_format.color_space);
 
         let graphics_and_present_queue_family_indices = [

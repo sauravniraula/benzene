@@ -60,15 +60,29 @@ impl SceneRender {
                 }],
             },
         );
-        let point_light_uniform_layout = VDescriptorSetLayout::new(
+        let lights_uniform_layout = VDescriptorSetLayout::new(
             &v_backend.v_device,
             VDescriptorLayoutConfig {
-                bindings: vec![VDescriptorBindingConfig {
-                    binding: 0,
-                    count: 1,
-                    descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                    shader_stage: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-                }],
+                bindings: vec![
+                    VDescriptorBindingConfig {
+                        binding: 0,
+                        count: 1,
+                        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                        shader_stage: vk::ShaderStageFlags::FRAGMENT,
+                    },
+                    VDescriptorBindingConfig {
+                        binding: 1,
+                        count: 1,
+                        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                        shader_stage: vk::ShaderStageFlags::FRAGMENT,
+                    },
+                    VDescriptorBindingConfig {
+                        binding: 2,
+                        count: 1,
+                        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                        shader_stage: vk::ShaderStageFlags::FRAGMENT,
+                    },
+                ],
             },
         );
         let image_sampler_layout = VDescriptorSetLayout::new(
@@ -84,7 +98,7 @@ impl SceneRender {
         );
         let descriptor_sets_layouts = vec![
             global_uniform_layout,
-            point_light_uniform_layout,
+            lights_uniform_layout,
             image_sampler_layout,
         ];
 
@@ -93,18 +107,33 @@ impl SceneRender {
             VPipelineInfoConfig {
                 binding_descriptions: vertex_binding_descriptions,
                 attribute_descriptions: vertex_attribute_descriptions,
-                vertex_shader_file: "assets/shaders/shader.vert".into(),
-                fragment_shader_file: "assets/shaders/shader.frag".into(),
+                vertex_shader_file: Some("assets/shaders/shader.vert".into()),
+                fragment_shader_file: Some("assets/shaders/shader.frag".into()),
             },
             Some(model_push_constant),
             &descriptor_sets_layouts,
         )];
 
+        let color_views: Vec<vk::ImageView> = v_backend
+            .v_swapchain
+            .v_image_views
+            .iter()
+            .map(|v| v.image_view)
+            .collect();
+        let depth_views: Vec<vk::ImageView> =
+            vec![v_backend.v_swapchain.depth_v_image_view.image_view];
+
         let v_rendering_system = VRenderingSystem::new(
             &v_backend.v_device,
-            &v_backend.v_swapchain,
             VRenderingSystemConfig {
                 pipeline_infos: &pipeline_infos,
+                extent: v_backend.v_swapchain.image_extent,
+                color_image_views: Some(&color_views),
+                depth_image_views: Some(&depth_views),
+                color_format: Some(v_backend.v_swapchain.v_images[0].config.format),
+                depth_format: Some(v_backend.v_swapchain.depth_format),
+                color_final_layout: Some(vk::ImageLayout::PRESENT_SRC_KHR),
+                depth_final_layout: Some(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
             },
         );
 

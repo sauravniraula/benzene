@@ -1,6 +1,5 @@
-use ash::vk::Extent2D;
 use glfw::{Action, Key, WindowEvent};
-use nalgebra::{Matrix4, Perspective3, Translation3, UnitQuaternion, Vector3};
+use nalgebra::Vector3;
 
 use crate::core::ecs::components::Camera3D;
 
@@ -88,30 +87,4 @@ pub fn camera_3d_compute_transform(camera: &mut Camera3D, dt: f32) {
     }
 
     // Inputs persist via active_keys; no per-frame clearing required
-}
-
-pub fn get_camera_3d_view_projection(
-    camera: &mut Camera3D,
-    image_extent: Extent2D,
-) -> (Matrix4<f32>, Matrix4<f32>) {
-    // Build view matrix from position and euler
-    let pos = camera.transform.position;
-    let e = camera.transform.rotation;
-    // Our current convention stores yaw in Y, pitch in X, roll in Z
-    let r = UnitQuaternion::from_euler_angles(e.x, e.y, e.z);
-    let r_inv = r.inverse();
-    let t_inv = Translation3::new(-pos.x, -pos.y, -pos.z);
-    let view = r_inv.to_homogeneous() * t_inv.to_homogeneous();
-
-    // Projection (Vulkan NDC requires Y flip)
-    let aspect = (image_extent.width as f32).max(1.0) / (image_extent.height as f32).max(1.0);
-    let fovy = std::f32::consts::FRAC_PI_3; // 60 degrees
-    let znear = 0.1_f32;
-    let zfar = 100.0_f32;
-    let mut projection = Perspective3::new(aspect, fovy, znear, zfar).to_homogeneous();
-    projection[(1, 1)] *= -1.0;
-
-    camera.transform.dirty = false;
-
-    (view, projection)
 }

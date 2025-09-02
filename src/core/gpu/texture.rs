@@ -1,6 +1,5 @@
 use ash::vk::{self, Extent3D};
 
-use crate::vulkan_backend::descriptor::{VDescriptorSets, VDescriptorWriteBatch};
 use crate::vulkan_backend::memory::image::{VImage, VImageConfig};
 use crate::vulkan_backend::{
     backend::VBackend,
@@ -104,25 +103,6 @@ impl ImageTexture {
             image_view,
             sampler,
         }
-    }
-
-    pub fn queue_descriptor_writes(
-        &self,
-        sets: &VDescriptorSets,
-        batch: &mut VDescriptorWriteBatch,
-    ) {
-        let views = (0..sets.count)
-            .map(|_| &self.image_view)
-            .collect::<Vec<_>>();
-        let samplers = (0..sets.count).map(|_| &self.sampler).collect::<Vec<_>>();
-        sets.queue_image_all_sets(
-            batch,
-            0,
-            vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            &views,
-            &samplers,
-            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        );
     }
 
     pub fn destroy(&self, v_backend: &VBackend) {

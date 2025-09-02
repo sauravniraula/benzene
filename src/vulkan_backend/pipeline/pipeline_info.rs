@@ -9,8 +9,8 @@ use ash::vk;
 
 pub struct VPipelineInfo {
     pub config: VPipelineInfoConfig,
-    pub vert_shader_module: vk::ShaderModule,
-    pub frag_shader_module: vk::ShaderModule,
+    pub vert_shader_module: Option<vk::ShaderModule>,
+    pub frag_shader_module: Option<vk::ShaderModule>,
     pub layout: vk::PipelineLayout,
     pub color_blend_attachments: Vec<vk::PipelineColorBlendAttachmentState>,
 }
@@ -22,30 +22,36 @@ impl VPipelineInfo {
         v_push_constant: Option<VPushConstant>,
         v_descriptor_set_layouts: &Vec<VDescriptorSetLayout>,
     ) -> Self {
-        let mut vert_shader_byte_code_path = config.vertex_shader_file.clone();
-        vert_shader_byte_code_path.push_str(".spv");
-        let mut frag_shader_byte_code_path = config.fragment_shader_file.clone();
-        frag_shader_byte_code_path.push_str(".spv");
-
-        let vert_shader_code = load_file_as_vec_u32(&vert_shader_byte_code_path);
-        let frag_shader_code = load_file_as_vec_u32(&frag_shader_byte_code_path);
-
-        let vert_shader_module_create_info =
-            vk::ShaderModuleCreateInfo::default().code(&vert_shader_code);
-        let frag_shader_module_create_info =
-            vk::ShaderModuleCreateInfo::default().code(&frag_shader_code);
-
-        let vert_shader_module = unsafe {
-            v_device
-                .device
-                .create_shader_module(&vert_shader_module_create_info, None)
-                .expect("failed to create vertex shader module")
+        let vert_shader_module: Option<vk::ShaderModule> = match &config.vertex_shader_file {
+            Some(file) => {
+                let vert_shader_byte_code_path = format!("{}.spv", file);
+                let vert_shader_code = load_file_as_vec_u32(&vert_shader_byte_code_path);
+                let vert_shader_module_create_info =
+                    vk::ShaderModuleCreateInfo::default().code(&vert_shader_code);
+                Some(unsafe {
+                    v_device
+                        .device
+                        .create_shader_module(&vert_shader_module_create_info, None)
+                        .expect("failed to create vertex shader module")
+                })
+            }
+            None => None,
         };
-        let frag_shader_module = unsafe {
-            v_device
-                .device
-                .create_shader_module(&frag_shader_module_create_info, None)
-                .expect("failed to create fragment shader module")
+
+        let frag_shader_module: Option<vk::ShaderModule> = match &config.fragment_shader_file {
+            Some(file) => {
+                let frag_shader_byte_code_path = format!("{}.spv", file);
+                let frag_shader_code = load_file_as_vec_u32(&frag_shader_byte_code_path);
+                let frag_shader_module_create_info =
+                    vk::ShaderModuleCreateInfo::default().code(&frag_shader_code);
+                Some(unsafe {
+                    v_device
+                        .device
+                        .create_shader_module(&frag_shader_module_create_info, None)
+                        .expect("failed to create fragment shader module")
+                })
+            }
+            None => None,
         };
 
         let descriptor_set_layouts: Vec<vk::DescriptorSetLayout> = v_descriptor_set_layouts
@@ -100,16 +106,24 @@ impl VPipelineInfo {
     }
 
     pub fn get_shader_states(&self) -> Vec<vk::PipelineShaderStageCreateInfo> {
-        vec![
-            vk::PipelineShaderStageCreateInfo::default()
-                .name(c"main")
-                .module(self.vert_shader_module)
-                .stage(vk::ShaderStageFlags::VERTEX),
-            vk::PipelineShaderStageCreateInfo::default()
-                .name(c"main")
-                .module(self.frag_shader_module)
-                .stage(vk::ShaderStageFlags::FRAGMENT),
-        ]
+        let mut stages: Vec<vk::PipelineShaderStageCreateInfo> = Vec::new();
+        if let Some(module) = self.vert_shader_module {
+            stages.push(
+                vk::PipelineShaderStageCreateInfo::default()
+                    .name(c"main")
+                    .module(module)
+                    .stage(vk::ShaderStageFlags::VERTEX),
+            );
+        }
+        if let Some(module) = self.frag_shader_module {
+            stages.push(
+                vk::PipelineShaderStageCreateInfo::default()
+                    .name(c"main")
+                    .module(module)
+                    .stage(vk::ShaderStageFlags::FRAGMENT),
+            );
+        }
+        stages
     }
 
     pub fn get_rasterization_state(&self) -> vk::PipelineRasterizationStateCreateInfo {
@@ -153,9 +167,12 @@ impl VPipelineInfo {
 
     pub fn destroy(&self, v_device: &VDevice) {
         unsafe {
-            [self.vert_shader_module, self.frag_shader_module].map(|each| {
-                v_device.device.destroy_shader_module(each, None);
-            });
+            if let Some(module) = self.vert_shader_module {
+                v_device.device.destroy_shader_module(module, None);
+            }
+            if let Some(module) = self.frag_shader_module {
+                v_device.device.destroy_shader_module(module, None);
+            }
             v_device.device.destroy_pipeline_layout(self.layout, None);
         }
     }

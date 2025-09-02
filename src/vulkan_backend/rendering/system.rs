@@ -1,10 +1,8 @@
-use crate::vulkan_backend::memory::image::image_view::VImageView;
 use crate::vulkan_backend::{
     backend_event::VBackendEvent,
     device::VDevice,
     pipeline::VPipelineInfo,
     rendering::{VRenderingSystemConfig, info::VRenderInfo},
-    swapchain::VSwapchain,
 };
 use ash::vk::{self, Extent2D, Offset2D, Rect2D};
 
@@ -14,64 +12,103 @@ pub struct VRenderingSystem {
     pub pipelines: Vec<vk::Pipeline>,
     pub render_area: Rect2D,
     pub framebuffers: Vec<vk::Framebuffer>,
+    pub clear_values: Vec<vk::ClearValue>,
+    pub viewport: vk::Viewport,
 }
 
 impl VRenderingSystem {
-    pub fn new(
-        v_device: &VDevice,
-        v_swapchain: &VSwapchain,
-        config: VRenderingSystemConfig,
-    ) -> Self {
-        let color_attachment_ref = vk::AttachmentReference::default()
-            .attachment(0)
-            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
-        let depth_attachment_ref = vk::AttachmentReference::default()
-            .attachment(1)
-            .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-        let subpass_1 = vk::SubpassDescription::default()
-            .color_attachments(std::slice::from_ref(&color_attachment_ref))
-            .depth_stencil_attachment(&depth_attachment_ref);
+    pub fn new(v_device: &VDevice, config: VRenderingSystemConfig) -> Self {
+        let mut attachment_descriptions: Vec<vk::AttachmentDescription> = Vec::new();
+        let mut attachment_refs: Vec<vk::AttachmentReference> = Vec::new();
+        let mut depth_ref_opt: Option<vk::AttachmentReference> = None;
 
-        let subpasses = [subpass_1];
+        if let Some(color_format) = config.color_format {
+            let color_attachment = vk::AttachmentDescription::default()
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .format(color_format)
+                .load_op(vk::AttachmentLoadOp::CLEAR)
+                .store_op(vk::AttachmentStoreOp::STORE)
+                .initial_layout(vk::ImageLayout::UNDEFINED)
+                .final_layout(
+                    config
+                        .color_final_layout
+                        .unwrap_or(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
+                );
 
-        let color_attachment = vk::AttachmentDescription::default()
-            .samples(vk::SampleCountFlags::TYPE_1)
-            .format(v_swapchain.v_images[0].config.format)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
-            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
+            let color_attachment_ref = vk::AttachmentReference::default()
+                .attachment(attachment_descriptions.len() as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
 
-        let depth_attachment = vk::AttachmentDescription::default()
-            .format(v_swapchain.depth_format)
-            .samples(vk::SampleCountFlags::TYPE_1)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
-            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
-            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .initial_layout(vk::ImageLayout::UNDEFINED)
-            .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+            attachment_descriptions.push(color_attachment);
+            attachment_refs.push(color_attachment_ref);
+        }
 
-        let attachments = [color_attachment, depth_attachment];
-        let attachments_count = attachments.len();
+        if let Some(depth_format) = config.depth_format {
+            let depth_attachment = vk::AttachmentDescription::default()
+                .format(depth_format)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .load_op(vk::AttachmentLoadOp::CLEAR)
+                .store_op(vk::AttachmentStoreOp::STORE)
+                .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+                .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .initial_layout(vk::ImageLayout::UNDEFINED)
+                .final_layout(
+                    config
+                        .depth_final_layout
+                        .unwrap_or(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
+                );
 
-        let subpass_dependencies = [
-            vk::SubpassDependency::default()
-                .src_subpass(vk::SUBPASS_EXTERNAL)
-                .dst_subpass(0)
-                .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-                .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT),
-            vk::SubpassDependency::default()
-                .src_subpass(vk::SUBPASS_EXTERNAL)
-                .dst_subpass(0)
-                .src_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
-                .src_stage_mask(vk::PipelineStageFlags::LATE_FRAGMENT_TESTS)
-                .dst_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
-                .dst_stage_mask(vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS),
-        ];
+            let depth_attachment_ref = vk::AttachmentReference::default()
+                .attachment(attachment_descriptions.len() as u32)
+                .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+            attachment_descriptions.push(depth_attachment);
+            depth_ref_opt = Some(depth_attachment_ref);
+        }
+
+        assert!(
+            !attachment_descriptions.is_empty(),
+            "VRenderingSystem requires at least one attachment (color or depth)"
+        );
+
+        let mut subpass = vk::SubpassDescription::default();
+        if !attachment_refs.is_empty() {
+            subpass = subpass.color_attachments(&attachment_refs);
+        }
+        if let Some(depth_ref) = depth_ref_opt.as_ref() {
+            subpass = subpass.depth_stencil_attachment(depth_ref);
+        }
+
+        let subpasses = [subpass];
+
+        let mut subpass_dependencies: Vec<vk::SubpassDependency> = Vec::new();
+        if config.color_format.is_some() {
+            subpass_dependencies.push(
+                vk::SubpassDependency::default()
+                    .src_subpass(vk::SUBPASS_EXTERNAL)
+                    .dst_subpass(0)
+                    .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+                    .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+                    .dst_access_mask(
+                        vk::AccessFlags::COLOR_ATTACHMENT_READ
+                            | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                    ),
+            );
+        }
+        if config.depth_format.is_some() {
+            subpass_dependencies.push(
+                vk::SubpassDependency::default()
+                    .src_subpass(vk::SUBPASS_EXTERNAL)
+                    .dst_subpass(0)
+                    .src_stage_mask(vk::PipelineStageFlags::LATE_FRAGMENT_TESTS)
+                    .dst_stage_mask(vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+                    .dst_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE),
+            );
+        }
 
         let render_pass_info = vk::RenderPassCreateInfo::default()
             .subpasses(&subpasses)
-            .attachments(&attachments)
+            .attachments(&attachment_descriptions)
             .dependencies(&subpass_dependencies);
 
         let render_pass = unsafe {
@@ -81,13 +118,13 @@ impl VRenderingSystem {
                 .expect("failed to create render pass")
         };
 
-        let framebuffers = VRenderingSystem::create_framebuffers(
+        let framebuffers = VRenderingSystem::create_framebuffers_raw(
             v_device,
-            attachments_count as u32,
+            attachment_descriptions.len() as u32,
             render_pass,
-            &v_swapchain.v_image_views,
-            &v_swapchain.depth_v_image_view,
-            v_swapchain.image_extent,
+            config.color_image_views,
+            config.depth_image_views,
+            config.extent,
         );
 
         let mut pipeline_create_infos = Vec::new();
@@ -143,32 +180,83 @@ impl VRenderingSystem {
             )
         };
 
+        let mut clear_values: Vec<vk::ClearValue> = Vec::new();
+        if config.color_format.is_some() {
+            let mut cv = vk::ClearValue::default();
+            cv.color = vk::ClearColorValue {
+                float32: [0.18, 0.22, 0.28, 1.0],
+            };
+            clear_values.push(cv);
+        }
+        if config.depth_format.is_some() {
+            let mut dv = vk::ClearValue::default();
+            dv.depth_stencil = vk::ClearDepthStencilValue {
+                depth: 1.0,
+                stencil: 0,
+            };
+            clear_values.push(dv);
+        }
+
+        let viewport = VRenderingSystem::get_viewport(config.extent);
+
         Self {
-            attachments_count,
+            attachments_count: attachment_descriptions.len(),
             render_pass,
             pipelines,
             render_area: Rect2D {
                 offset: Offset2D { x: 0, y: 0 },
                 extent: vk::Extent2D {
-                    width: v_swapchain.v_images[0].config.extent.width,
-                    height: v_swapchain.v_images[0].config.extent.height,
+                    width: config.extent.width,
+                    height: config.extent.height,
                 },
             },
             framebuffers,
+            clear_values,
+            viewport,
         }
     }
 
-    pub fn create_framebuffers(
+    pub fn get_viewport(image_extent: Extent2D) -> vk::Viewport {
+        vk::Viewport::default()
+            .height(image_extent.height as f32)
+            .width(image_extent.width as f32)
+            .x(0f32)
+            .y(0f32)
+            .min_depth(0f32)
+            .max_depth(1f32)
+    }
+
+    pub fn create_framebuffers_raw(
         v_device: &VDevice,
         attachments_count: u32,
         render_pass: vk::RenderPass,
-        image_views: &Vec<VImageView>,
-        depth_image_view: &VImageView,
+        color_image_views: Option<&[vk::ImageView]>,
+        depth_image_views: Option<&[vk::ImageView]>,
         image_extent: Extent2D,
     ) -> Vec<vk::Framebuffer> {
-        (0..image_views.len())
+        let color_len = color_image_views.map(|v| v.len()).unwrap_or(0);
+        let depth_len = depth_image_views.map(|v| v.len()).unwrap_or(0);
+        let framebuffer_count = if color_len > 0 {
+            color_len
+        } else {
+            depth_len.max(1)
+        };
+
+        (0..framebuffer_count)
             .map(|i| {
-                let attachments = [image_views[i].image_view, depth_image_view.image_view];
+                let mut attachments: Vec<vk::ImageView> = Vec::new();
+                if let Some(colors) = color_image_views {
+                    attachments.push(colors[i]);
+                }
+                if let Some(depths) = depth_image_views {
+                    let depth_view = if depths.len() == 1 {
+                        depths[0]
+                    } else {
+                        depths[i]
+                    };
+                    attachments.push(depth_view);
+                }
+
                 let info = vk::FramebufferCreateInfo::default()
                     .attachment_count(attachments_count)
                     .attachments(&attachments)
@@ -186,18 +274,34 @@ impl VRenderingSystem {
             .collect()
     }
 
+    pub fn update_framebuffers(
+        &mut self,
+        v_device: &VDevice,
+        color_image_views: Option<&[vk::ImageView]>,
+        depth_image_views: Option<&[vk::ImageView]>,
+        image_extent: Extent2D,
+    ) {
+        self.destroy_framebuffers(v_device);
+
+        self.viewport = VRenderingSystem::get_viewport(image_extent);
+        self.framebuffers = VRenderingSystem::create_framebuffers_raw(
+            v_device,
+            self.attachments_count as u32,
+            self.render_pass,
+            color_image_views,
+            depth_image_views,
+            image_extent,
+        );
+        self.render_area = Rect2D {
+            offset: self.render_area.offset,
+            extent: image_extent,
+        };
+    }
+
     pub fn start(&self, v_device: &VDevice, info: &VRenderInfo) {
-        let mut clear_values = [vk::ClearValue::default(), vk::ClearValue::default()];
-        clear_values[0].color = vk::ClearColorValue {
-            float32: [0.18, 0.22, 0.28, 1.0], // darker blue color
-        };
-        clear_values[1].depth_stencil = vk::ClearDepthStencilValue {
-            depth: 1.0,
-            stencil: 0,
-        };
         let begin_info = vk::RenderPassBeginInfo::default()
             .render_pass(self.render_pass)
-            .clear_values(&clear_values)
+            .clear_values(&self.clear_values)
             .framebuffer(self.framebuffers[info.image_index])
             .render_area(self.render_area);
 
@@ -208,16 +312,9 @@ impl VRenderingSystem {
                 vk::SubpassContents::INLINE,
             );
 
-            let viewport = vk::Viewport::default()
-                .height(self.render_area.extent.height as f32)
-                .width(self.render_area.extent.width as f32)
-                .x(0f32)
-                .y(0f32)
-                .min_depth(0f32)
-                .max_depth(1f32);
             v_device
                 .device
-                .cmd_set_viewport(info.command_buffer, 0, &[viewport]);
+                .cmd_set_viewport(info.command_buffer, 0, &[self.viewport]);
             v_device
                 .device
                 .cmd_set_scissor(info.command_buffer, 0, &[self.render_area]);
@@ -233,20 +330,19 @@ impl VRenderingSystem {
     pub fn handle_backend_event(&mut self, event: &VBackendEvent) {
         match event {
             VBackendEvent::UpdateFramebuffers(v_device, v_swapchain) => {
-                self.destroy_framebuffers(v_device);
-
-                self.framebuffers = VRenderingSystem::create_framebuffers(
+                let color_views: Vec<vk::ImageView> = v_swapchain
+                    .v_image_views
+                    .iter()
+                    .map(|v| v.image_view)
+                    .collect();
+                let depth_views: Vec<vk::ImageView> =
+                    vec![v_swapchain.depth_v_image_view.image_view];
+                self.update_framebuffers(
                     v_device,
-                    self.attachments_count as u32,
-                    self.render_pass,
-                    &v_swapchain.v_image_views,
-                    &v_swapchain.depth_v_image_view,
+                    Some(&color_views),
+                    Some(&depth_views),
                     v_swapchain.image_extent,
                 );
-                self.render_area = Rect2D {
-                    offset: self.render_area.offset,
-                    extent: v_swapchain.image_extent,
-                }
             }
             _ => {}
         }

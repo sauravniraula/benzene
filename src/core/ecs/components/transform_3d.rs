@@ -1,4 +1,5 @@
-use nalgebra::{Matrix4, Vector3};
+use ash::vk::Extent2D;
+use nalgebra::{Matrix4, Perspective3, Translation3, UnitQuaternion, Vector3};
 
 #[derive(Clone, Debug)]
 pub struct Transform3D {
@@ -25,5 +26,32 @@ impl Transform3D {
             Vector3::new(0.0, 0.0, 0.0),
             Vector3::new(1.0, 1.0, 1.0),
         )
+    }
+
+    pub fn get_unit_quaternion(&self) -> UnitQuaternion<f32> {
+        UnitQuaternion::from_euler_angles(self.rotation.x, self.rotation.y, self.rotation.z)
+    }
+
+    pub fn get_transform_3d_view_projection(
+        &self,
+        image_extent: Extent2D,
+    ) -> (Matrix4<f32>, Matrix4<f32>) {
+        // Build view matrix from position and euler
+        let pos = self.position;
+        // Our current convention stores yaw in Y, pitch in X, roll in Z
+        let r = self.get_unit_quaternion();
+        let r_inv = r.inverse();
+        let t_inv = Translation3::new(-pos.x, -pos.y, -pos.z);
+        let view = r_inv.to_homogeneous() * t_inv.to_homogeneous();
+
+        // Projection (Vulkan NDC requires Y flip)
+        let aspect = (image_extent.width as f32).max(1.0) / (image_extent.height as f32).max(1.0);
+        let fovy = std::f32::consts::FRAC_PI_3; // 60 degrees
+        let znear = 0.1_f32;
+        let zfar = 100.0_f32;
+        let mut projection = Perspective3::new(aspect, fovy, znear, zfar).to_homogeneous();
+        projection[(1, 1)] *= -1.0;
+
+        (view, projection)
     }
 }

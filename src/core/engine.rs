@@ -57,6 +57,26 @@ impl GameEngine {
         engine
     }
 
+    pub fn init(&mut self) {
+        let default_texture = ImageTexture::empty(&self.v_backend, vk::Format::R8G8B8A8_SRGB);
+        let default_texture_id = get_random_id();
+        self.textures.insert(default_texture_id, default_texture);
+        let default_material_index = self.materials_manager.allocate_material(
+            &self.v_backend.v_device,
+            &self.scene_render.descriptor_sets_layouts[2],
+        );
+        let default_material = Material3D {
+            manager_index: default_material_index,
+        };
+        let mut batch_writer = VDescriptorWriteBatch::new();
+        default_material.queue_descriptor_writes(
+            &self.materials_manager,
+            &self.textures[&default_texture_id],
+            &mut batch_writer,
+        );
+        batch_writer.flush(&self.v_backend.v_device);
+    }
+
     pub fn create_scene(&self) -> Scene {
         Scene::new(&self.v_backend, &self.scene_render)
     }
@@ -81,10 +101,10 @@ impl GameEngine {
     }
 
     pub fn get_material_3d_from_texture(&mut self, texture: Id) -> Material3D {
-        let color = self
+        let texture = self
             .textures
             .get(&texture)
-            .expect("invalid texture id passed to get_material_3d_from_texture_id");
+            .expect("invalid texture id passed to get_material_3d_from_texture");
         let allocated_sets_index = self.materials_manager.allocate_material(
             &self.v_backend.v_device,
             &self.scene_render.descriptor_sets_layouts[2],
@@ -92,15 +112,13 @@ impl GameEngine {
 
         let mut batch_writer = VDescriptorWriteBatch::new();
 
-        color.queue_descriptor_writes(
-            &self.materials_manager.get_sets_at(allocated_sets_index),
-            &mut batch_writer,
-        );
-        batch_writer.flush(&self.v_backend.v_device);
-
-        Material3D {
+        let material = Material3D {
             manager_index: allocated_sets_index,
-        }
+        };
+
+        material.queue_descriptor_writes(&self.materials_manager, texture, &mut batch_writer);
+        batch_writer.flush(&self.v_backend.v_device);
+        material
     }
 
     pub fn unload_texture(&mut self, texture: Id) {

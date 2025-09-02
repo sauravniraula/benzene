@@ -3,6 +3,8 @@ pub mod camera_3d;
 pub mod point_light_3d;
 pub mod structure_3d;
 pub mod material_3d;
+pub mod directional_light_3d;
+pub mod spot_light_3d;
 
 pub use transform_3d::Transform3D;
 pub use camera_3d::Camera3D;
