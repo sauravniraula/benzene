@@ -113,11 +113,9 @@ impl VPhysicalDevice {
     pub fn select_present_mode(&self) -> vk::PresentModeKHR {
         for each in self.present_modes.iter() {
             if *each == vk::PresentModeKHR::MAILBOX {
-                println!("Selected present mode: MAILBOX");
                 return vk::PresentModeKHR::MAILBOX;
             }
         }
-        println!("Selected present mode: FIFO");
         return vk::PresentModeKHR::FIFO;
     }
 

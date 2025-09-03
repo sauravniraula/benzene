@@ -1,4 +1,4 @@
-use ash::vk;
+use ash::vk::{self};
 
 use crate::{
     core::{gpu::materials_manager::MaterialsManager, model_push_constant::ModelPushConstant},
@@ -114,27 +114,30 @@ impl SceneRender {
             &descriptor_sets_layouts,
         )];
 
-        let color_views: Vec<vk::ImageView> = v_backend
-            .v_swapchain
-            .v_image_views
-            .iter()
-            .map(|v| v.image_view)
-            .collect();
-        let depth_views: Vec<vk::ImageView> =
-            vec![v_backend.v_swapchain.depth_v_image_view.image_view];
+        let color_views = &v_backend.v_swapchain.v_image_views;
+        let depth_view = &v_backend.v_swapchain.depth_v_image_view;
 
-        let v_rendering_system = VRenderingSystem::new(
+        let mut v_rendering_system = VRenderingSystem::new(
             &v_backend.v_device,
             VRenderingSystemConfig {
                 pipeline_infos: &pipeline_infos,
-                extent: v_backend.v_swapchain.image_extent,
-                color_image_views: Some(&color_views),
-                depth_image_views: Some(&depth_views),
                 color_format: Some(v_backend.v_swapchain.v_images[0].config.format),
                 depth_format: Some(v_backend.v_swapchain.depth_format),
                 color_final_layout: Some(vk::ImageLayout::PRESENT_SRC_KHR),
                 depth_final_layout: Some(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
             },
+        );
+        v_rendering_system.add_framebuffers(
+            &v_backend.v_device,
+            color_views.as_slice(),
+            std::slice::from_ref(depth_view),
+            v_backend.v_swapchain.image_extent,
+        );
+        v_rendering_system.set_render_area(
+            0,
+            0,
+            v_backend.v_swapchain.image_extent.width,
+            v_backend.v_swapchain.image_extent.height,
         );
 
         // let shadow_pipeline_infos = vec![VPipelineInfo::new(
@@ -153,7 +156,6 @@ impl SceneRender {
         //     &v_backend.v_device,
         //     VRenderingSystemConfig {
         //         pipeline_infos: &shadow_pipeline_infos,
-        //         extent: v_backend.v_swapchain.image_extent,
         //         color_image_views: (),
         //         depth_image_views: (),
         //         color_format: (),
@@ -170,6 +172,31 @@ impl SceneRender {
         }
     }
 
+    pub fn handle_backend_event(&mut self, event: &VBackendEvent) {
+        match event {
+            VBackendEvent::UpdateFramebuffers(v_device, v_swapchain) => {
+                self.v_rendering_system.remove_all_framebuffers(v_device);
+
+                let color_views = &v_swapchain.v_image_views;
+                let depth_view = &v_swapchain.depth_v_image_view;
+
+                self.v_rendering_system.add_framebuffers(
+                    v_device,
+                    color_views.as_slice(),
+                    std::slice::from_ref(depth_view),
+                    v_swapchain.image_extent,
+                );
+                self.v_rendering_system.set_render_area(
+                    0,
+                    0,
+                    v_swapchain.image_extent.width,
+                    v_swapchain.image_extent.height,
+                );
+            }
+            _ => {}
+        }
+    }
+
     pub fn render(
         &self,
         v_device: &VDevice,
@@ -177,7 +204,9 @@ impl SceneRender {
         info: &VRenderInfo,
         recordables: &[&dyn SceneRenderRecordable],
     ) {
-        self.v_rendering_system.start(v_device, info);
+        self.v_rendering_system
+            .start(v_device, info.command_buffer, info.image_index);
+
         unsafe {
             v_device.device.cmd_bind_pipeline(
                 info.command_buffer,
@@ -200,10 +229,6 @@ impl SceneRender {
         }
 
         self.v_rendering_system.end(v_device, info);
-    }
-
-    pub fn handle_backend_event(&mut self, event: &VBackendEvent) {
-        self.v_rendering_system.handle_backend_event(event);
     }
 
     pub fn destroy(&self, v_device: &VDevice) {
