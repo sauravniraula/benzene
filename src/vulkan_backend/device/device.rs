@@ -87,7 +87,7 @@ impl VDevice {
         let transfer_queue = unsafe { device.get_device_queue(transfer_queue_family_index, 0) };
         let present_queue = unsafe { device.get_device_queue(present_queue_family_index, 0) };
 
-        let buffer_sharing_mode = if buffer_queue_family_indices.len() > 0 {
+        let buffer_sharing_mode = if buffer_queue_family_indices.len() > 1 {
             vk::SharingMode::CONCURRENT
         } else {
             vk::SharingMode::EXCLUSIVE

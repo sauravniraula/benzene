@@ -6,3 +6,4 @@ pub mod scene_render;
 pub mod texture;
 pub mod directional_light_uniform;
 pub mod spot_light_uniform;
+pub mod shadow_mapping;

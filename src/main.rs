@@ -39,7 +39,7 @@ fn main() {
     // );
     // scene.add_directional_light_3d_component(
     //     &sun,
-    //     DirectionalLight3D::new(Vector4::new(1.0, 0.95, 0.8, 1.0)),
+    //     DirectionalLight3D::new(Vector4::new(1.0, 0.95, 0.8, 0.6)),
     // );
 
     // Spot light
@@ -48,14 +48,14 @@ fn main() {
     scene.add_transform_3d_component(
         &spot_light_entity,
         Transform3D::new(
-            Vector3::new(5.0, 5.0, 0.0),
-            Vector3::new(0.0, 90f32.to_radians(), 20f32.to_radians()),
+            Vector3::new(5.0, 5.0, -5.0),
+            Vector3::new(0.0, 90f32.to_radians(), 45f32.to_radians()),
             Vector3::new(1.0, 1.0, 1.0),
         ),
     );
     scene.add_spot_light_3d_component(
         &spot_light_entity,
-        SpotLight3D::new(Vector4::new(1.0, 1.0, 1.0, 5.0)),
+        SpotLight3D::new(Vector4::new(1.0, 1.0, 1.0, 10.0)),
     );
 
     // // Red Light

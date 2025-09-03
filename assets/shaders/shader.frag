@@ -32,46 +32,57 @@ layout(location = 3) in vec2 in_uv;
 layout(location = 0) out vec4 out_color;
 
 void main() {
-  // vec3 base_color = in_color;
+  vec3 in_normal_ws_norm = normalize(in_normal_ws);
+
   vec3 base_color = texture(texture_sampler, in_uv).xyz;
 
   vec3 accum = vec3(0.0);
 
+  // Point Light
   for (int i = 0; i < 16; ++i) {
     if (plu.points[i].w < 0.5) { continue; }
     vec3 light_pos = plu.points[i].xyz;
     vec3 light_color = plu.colors[i].xyz;
-    float light_alpha = plu.colors[i].w;
+    float light_intensity = plu.colors[i].w;
 
-    vec3 dir_to_light = (vec4(light_pos, 1.0) - in_position_ws).xyz;
-    float diffusion = max(dot(normalize(dir_to_light), normalize(in_normal_ws)), 0.0);
-    float atten = 1.0 / max(dot(dir_to_light, dir_to_light), 0.0001);
-    accum += base_color * light_color * light_alpha * diffusion * atten;
+    vec3 to_light_vector = light_pos - in_position_ws.xyz;
+    float diffusion = max(dot(normalize(to_light_vector), in_normal_ws_norm), 0.0);
+    float atten = 1.0 / max(dot(to_light_vector, to_light_vector), 0.0001);
+    accum += base_color * light_color * light_intensity * diffusion * atten;
   }
 
+  // Directional Light
   for (int i = 0; i < 16; ++i) {
     if (dlu.directions[i].w < 0.5) { continue; }
     vec3 light_color = dlu.colors[i].xyz;
-    float light_alpha = dlu.colors[i].w;
+    float light_intensity = dlu.colors[i].w;
 
-    float diffusion = max(dot(-normalize(dlu.directions[i].xyz), normalize(in_normal_ws)), 0.0);
-    accum += base_color * light_color * light_alpha * diffusion;
+    float diffusion = max(dot(-normalize(dlu.directions[i].xyz), in_normal_ws_norm), 0.0);
+    accum += base_color * light_color * light_intensity * diffusion;
   }
 
+  // Spot Light
   for (int i = 0; i < 16; ++i) {
     if (slu.positions[i].w < 0.5) { continue; }
     vec3 light_pos = slu.positions[i].xyz;
     vec3 light_color = slu.colors[i].xyz;
-    float light_alpha = slu.colors[i].w;
+    float light_intensity = slu.colors[i].w;
 
-    vec3 dir_to_light = (vec4(light_pos, 1.0) - in_position_ws).xyz;
-    vec3 L = normalize(dir_to_light);
-    vec3 N = normalize(in_normal_ws);
-    vec3 spot_dir = normalize(slu.directions[i].xyz);
-    float lambert = max(dot(L, N), 0.0);
-    float spot_align = max(dot(normalize(-dir_to_light), spot_dir), 0.0);
-    float atten = 1.0 / max(dot(dir_to_light, dir_to_light), 0.0001);
-    accum += base_color * light_color * light_alpha * lambert * spot_align * atten;
+    vec3 to_light_vector = light_pos - in_position_ws.xyz;
+    vec3 to_light_vector_norm = normalize(to_light_vector);
+    float in_spot = max(dot(-to_light_vector_norm, normalize(slu.directions[i].xyz)), 0.0);
+    float diffusion = max(dot(to_light_vector_norm, in_normal_ws_norm), 0.0);
+    float atten = 1.0 / max(dot(to_light_vector, to_light_vector), 0.0001);
+
+    // Improved soft cutoff just within this condition block
+    if (in_spot <= 0.7) {
+      in_spot = 0.0;
+    } else {
+      in_spot = clamp((in_spot - 0.7) / 0.3, 0.0, 1.0);
+      in_spot = in_spot * in_spot;
+    }
+
+    accum += base_color * light_color * light_intensity * in_spot * diffusion * atten;
   }
 
   // Ambient term

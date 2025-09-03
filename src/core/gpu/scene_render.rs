@@ -137,6 +137,32 @@ impl SceneRender {
             },
         );
 
+        // let shadow_pipeline_infos = vec![VPipelineInfo::new(
+        //     &v_backend.v_device,
+        //     VPipelineInfoConfig {
+        //         binding_descriptions: vertex_binding_descriptions,
+        //         attribute_descriptions: vertex_attribute_descriptions,
+        //         vertex_shader_file: Some("assets/shaders/shadow.vert".into()),
+        //         fragment_shader_file: None,
+        //     },
+        //     Some(model_push_constant),
+        //     &vec![global_uniform_layout],
+        // )];
+
+        // let v_shadow_rendering_system = VRenderingSystem::new(
+        //     &v_backend.v_device,
+        //     VRenderingSystemConfig {
+        //         pipeline_infos: &shadow_pipeline_infos,
+        //         extent: v_backend.v_swapchain.image_extent,
+        //         color_image_views: (),
+        //         depth_image_views: (),
+        //         color_format: (),
+        //         depth_format: (),
+        //         color_final_layout: (),
+        //         depth_final_layout: (),
+        //     },
+        // );
+
         Self {
             v_rendering_system,
             pipeline_infos,
