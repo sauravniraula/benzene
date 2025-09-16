@@ -7,11 +7,14 @@ use crate::{
     window::Window,
 };
 use ash::{khr, vk};
+use crate::core::ecs::types::Id;
+use rand;
 
 pub struct VSwapchain {
     pub swapchain_device: khr::swapchain::Device,
     pub swapchain: vk::SwapchainKHR,
     pub image_extent: vk::Extent2D,
+    pub image_ids: Vec<Id>,
     pub v_images: Vec<VImage>,
     pub v_image_views: Vec<VImageView>,
     pub depth_v_image: VImage,
@@ -68,6 +71,8 @@ impl VSwapchain {
                 .get_swapchain_images(swapchain)
                 .expect("failed to get swapchain images")
         };
+
+        let image_ids: Vec<Id> = (0..images.len()).map(|_| rand::random()).collect();
 
         let extent_3d = vk::Extent3D {
             width: image_extent.width,
@@ -143,6 +148,7 @@ impl VSwapchain {
             swapchain_device,
             swapchain,
             image_extent,
+            image_ids,
             v_images,
             v_image_views,
             depth_v_image,

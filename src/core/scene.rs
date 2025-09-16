@@ -15,10 +15,10 @@ use crate::{
         gpu::{
             directional_light_uniform::DirectionalLightUniform,
             global_uniform::GlobalUniform,
+            materials_manager::MaterialsManager,
             point_light_uniform::PointLightUniform,
-            scene_render::{
-                SceneRender, SceneRenderDrawable, SceneRenderRecordContext, SceneRenderRecordable,
-            },
+            scene_render::{SceneRender, SceneRenderDrawable, SceneRenderRecordable},
+            shadow_mapping::ShadowMapping,
             spot_light_uniform::SpotLightUniform,
             texture::ImageTexture,
         },
@@ -27,16 +27,19 @@ use crate::{
     vulkan_backend::{
         backend::VBackend,
         backend_event::VBackendEvent,
+        device::VDevice,
         descriptor::{
-            VDescriptorPool, VDescriptorSets, VDescriptorWriteBatch,
+            VDescriptorPool, VDescriptorSetLayout, VDescriptorSets, VDescriptorWriteBatch,
             config::{VDescriptorPoolConfig, VDescriptorPoolTypeConfig},
         },
+        pipeline::VPipelineInfo,
     },
 };
 use ash::vk;
 use glfw::WindowEvent;
 use nalgebra::Vector4;
 use std::collections::HashMap;
+use std::mem::size_of;
 
 pub struct Scene {
     default_descriptor_pool: VDescriptorPool,
@@ -62,6 +65,9 @@ pub struct Scene {
 
     // Defaults
     texture: ImageTexture,
+
+    // Shadow Mapping
+    pub shadow_mapping: ShadowMapping,
 
     // Status
     is_extent_dirty: bool,
@@ -139,6 +145,7 @@ impl Scene {
             structure_3d_components: HashMap::new(),
             material_3d_components: HashMap::new(),
             texture,
+            shadow_mapping: ShadowMapping::new(),
             is_extent_dirty: false,
             has_point_light_3d_changed: false,
             has_directional_light_3d_changed: false,
@@ -372,12 +379,20 @@ impl Scene {
 }
 
 impl SceneRenderRecordable for Scene {
-    fn record(&self, ctx: &SceneRenderRecordContext) {
+    fn record_geometry(
+        &self,
+        v_device: &VDevice,
+        materials_manager: &MaterialsManager,
+        cmd: vk::CommandBuffer,
+        _frame_index: usize,
+        pipeline_infos: &Vec<VPipelineInfo>,
+        _descriptor_sets_layouts: &Vec<VDescriptorSetLayout>,
+    ) {
         unsafe {
-            ctx.v_device.device.cmd_bind_descriptor_sets(
-                ctx.cmd,
+            v_device.device.cmd_bind_descriptor_sets(
+                cmd,
                 vk::PipelineBindPoint::GRAPHICS,
-                ctx.pipeline_infos[0].layout,
+                pipeline_infos[0].layout,
                 0,
                 &[self.global_uniform_sets.sets[0], self.lights_sets.sets[0]],
                 &[],
@@ -392,12 +407,12 @@ impl SceneRenderRecordable for Scene {
                 };
 
                 unsafe {
-                    ctx.v_device.device.cmd_bind_descriptor_sets(
-                        ctx.cmd,
+                    v_device.device.cmd_bind_descriptor_sets(
+                        cmd,
                         vk::PipelineBindPoint::GRAPHICS,
-                        ctx.pipeline_infos[0].layout,
+                        pipeline_infos[0].layout,
                         2,
-                        &[ctx.materials_manager.get_sets_at(material_3d_index).sets[0]],
+                        &[materials_manager.get_sets_at(material_3d_index).sets[0]],
                         &[],
                     );
                 }
@@ -412,15 +427,15 @@ impl SceneRenderRecordable for Scene {
                     )
                 };
                 unsafe {
-                    ctx.v_device.device.cmd_push_constants(
-                        ctx.cmd,
-                        ctx.pipeline_infos[0].layout,
+                    v_device.device.cmd_push_constants(
+                        cmd,
+                        pipeline_infos[0].layout,
                         vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                         0,
                         data,
                     );
                 }
-                structure_3d.model.draw(ctx.v_device, ctx.cmd);
+                structure_3d.model.draw(v_device, cmd);
             }
         }
     }

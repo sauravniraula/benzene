@@ -1,4 +1,6 @@
 use crate::vulkan_backend::memory::image::image_view::VImageView;
+use crate::core::ecs::types::Id;
+use std::collections::HashMap;
 use crate::vulkan_backend::{
     device::VDevice,
     pipeline::VPipelineInfo,
@@ -13,10 +15,11 @@ pub struct VRenderingSystem {
     pub render_pass: vk::RenderPass,
     pub pipelines: Vec<vk::Pipeline>,
     pub render_area: Option<Rect2D>,
-    pub framebuffers: Vec<vk::Framebuffer>,
+    pub framebuffers: HashMap<Id, vk::Framebuffer>,
     pub color_clear_value: Option<vk::ClearValue>,
     pub depth_clear_value: Option<vk::ClearValue>,
     pub viewport: Option<vk::Viewport>,
+    pub dynamic_viewport: bool,
 }
 
 impl VRenderingSystem {
@@ -121,7 +124,7 @@ impl VRenderingSystem {
                 .expect("failed to create render pass")
         };
 
-        let framebuffers: Vec<vk::Framebuffer> = Vec::new();
+        let framebuffers: HashMap<Id, vk::Framebuffer> = HashMap::new();
 
         let mut pipeline_create_infos = Vec::new();
 
@@ -209,103 +212,96 @@ impl VRenderingSystem {
             color_clear_value,
             depth_clear_value,
             viewport,
+            dynamic_viewport: config.dynamic_viewport,
         }
-    }
-
-    pub fn get_viewport(image_extent: Extent2D) -> vk::Viewport {
-        vk::Viewport::default()
-            .height(image_extent.height as f32)
-            .width(image_extent.width as f32)
-            .x(0f32)
-            .y(0f32)
-            .min_depth(0f32)
-            .max_depth(1f32)
     }
 
     pub fn set_render_area(&mut self, x: i32, y: i32, width: u32, height: u32) {
         let offset = vk::Offset2D { x, y };
         let extent = vk::Extent2D { width, height };
-        self.viewport = Some(VRenderingSystem::get_viewport(extent));
         self.render_area = Some(vk::Rect2D { offset, extent });
     }
 
-    pub fn add_framebuffers(
+    pub fn set_viewport(
         &mut self,
-        v_device: &VDevice,
-        color_views: &[VImageView],
-        depth_views: &[VImageView],
-        image_extent: Extent2D,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        min_depth: f32,
+        max_depth: f32,
     ) {
-        let color_len = color_views.len();
-        let depth_len = depth_views.len();
-        assert!(
-            color_len > 0 || depth_len > 0,
-            "add_framebuffers requires at least one of color or depth views"
+        self.viewport = Some(
+            vk::Viewport::default()
+                .height(height)
+                .width(width)
+                .x(x)
+                .y(y)
+                .min_depth(min_depth)
+                .max_depth(max_depth),
         );
-        if self.has_color {
-            assert!(
-                color_len > 0,
-                "render pass expects color attachment, but color_views is empty"
-            );
-        } else {
-            assert!(
-                color_len == 0,
-                "no color attachment configured; pass an empty color_views slice"
-            );
-        }
-        if self.has_depth {
-            assert!(
-                depth_len > 0,
-                "render pass expects depth attachment, but depth_views is empty"
-            );
-        } else {
-            assert!(
-                depth_len == 0,
-                "no depth attachment configured; pass an empty depth_views slice"
-            );
-        }
-
-        self.remove_all_framebuffers(v_device);
-
-        let framebuffer_count = if self.has_color {
-            color_len
-        } else {
-            depth_len.max(1)
-        };
-
-        self.framebuffers = (0..framebuffer_count)
-            .map(|i| {
-                let mut attachments: Vec<vk::ImageView> = Vec::new();
-                if self.has_color {
-                    attachments.push(color_views[i].image_view);
-                }
-                if self.has_depth {
-                    let depth_view = if depth_len == 1 {
-                        depth_views[0].image_view
-                    } else {
-                        depth_views[i].image_view
-                    };
-                    attachments.push(depth_view);
-                }
-
-                let info = vk::FramebufferCreateInfo::default()
-                    .attachment_count(self.attachments_count as u32)
-                    .attachments(&attachments)
-                    .render_pass(self.render_pass)
-                    .width(image_extent.width)
-                    .height(image_extent.height)
-                    .layers(1);
-                unsafe {
-                    v_device
-                        .device
-                        .create_framebuffer(&info, None)
-                        .expect("failed to create framebuffer")
-                }
-            })
-            .collect();
     }
 
-    pub fn start(&self, v_device: &VDevice, command_buffer: vk::CommandBuffer, image_index: usize) {
+    pub fn add_framebuffer(
+        &mut self,
+        v_device: &VDevice,
+        id: Id,
+        color_view: Option<&VImageView>,
+        depth_view: Option<&VImageView>,
+        image_extent: Extent2D,
+        update_render_pass: bool,
+        update_viewport: bool,
+    ) {
+        if self.has_color {
+            assert!(color_view.is_some(), "render pass expects color attachment, but color_view is None");
+        } else {
+            assert!(color_view.is_none(), "no color attachment configured; color_view must be None");
+        }
+        if self.has_depth {
+            assert!(depth_view.is_some(), "render pass expects depth attachment, but depth_view is None");
+        } else {
+            assert!(depth_view.is_none(), "no depth attachment configured; depth_view must be None");
+        }
+
+        let mut attachments: Vec<vk::ImageView> = Vec::new();
+        if let Some(cv) = color_view {
+            attachments.push(cv.image_view);
+        }
+        if let Some(dv) = depth_view {
+            attachments.push(dv.image_view);
+        }
+
+        let info = vk::FramebufferCreateInfo::default()
+            .attachment_count(self.attachments_count as u32)
+            .attachments(&attachments)
+            .render_pass(self.render_pass)
+            .width(image_extent.width)
+            .height(image_extent.height)
+            .layers(1);
+        let framebuffer = unsafe {
+            v_device
+                .device
+                .create_framebuffer(&info, None)
+                .expect("failed to create framebuffer")
+        };
+        self.framebuffers.insert(id, framebuffer);
+
+        if update_render_pass {
+            self.set_render_area(0, 0, image_extent.width, image_extent.height);
+        }
+        if update_viewport {
+            self.set_viewport(
+                0f32,
+                0f32,
+                image_extent.width as f32,
+                image_extent.height as f32,
+                0f32,
+                1f32,
+            );
+        }
+    }
+
+    pub fn start(&self, v_device: &VDevice, command_buffer: vk::CommandBuffer, image_id: &Id) {
         let mut clear_values: Vec<vk::ClearValue> = Vec::new();
         if let Some(cv) = self.color_clear_value.as_ref() {
             clear_values.push(*cv);
@@ -315,12 +311,16 @@ impl VRenderingSystem {
         }
 
         let render_area = self.render_area.expect("render_area not set");
-        let viewport = self.viewport.expect("viewport not set");
+
+        let framebuffer = *self
+            .framebuffers
+            .get(image_id)
+            .expect("framebuffer not found for image_id");
 
         let begin_info = vk::RenderPassBeginInfo::default()
             .render_pass(self.render_pass)
             .clear_values(&clear_values)
-            .framebuffer(self.framebuffers[image_index])
+            .framebuffer(framebuffer)
             .render_area(render_area);
 
         unsafe {
@@ -330,12 +330,16 @@ impl VRenderingSystem {
                 vk::SubpassContents::INLINE,
             );
 
-            v_device
-                .device
-                .cmd_set_viewport(command_buffer, 0, &[viewport]);
-            v_device
-                .device
-                .cmd_set_scissor(command_buffer, 0, &[render_area]);
+            if self.dynamic_viewport {
+                let viewport = self.viewport.expect("viewport not set");
+
+                v_device
+                    .device
+                    .cmd_set_viewport(command_buffer, 0, &[viewport]);
+                v_device
+                    .device
+                    .cmd_set_scissor(command_buffer, 0, &[render_area]);
+            }
         };
     }
 
@@ -351,20 +355,19 @@ impl VRenderingSystem {
         }
     }
 
-    pub fn remove_framebuffer_at(&mut self, v_device: &VDevice, index: usize) {
-        if index < self.framebuffers.len() {
+    pub fn remove_framebuffer(&mut self, v_device: &VDevice, id: &Id) {
+        if let Some(fb) = self.framebuffers.remove(id) {
             unsafe {
                 v_device
                     .device
-                    .destroy_framebuffer(self.framebuffers[index], None);
+                    .destroy_framebuffer(fb, None);
             }
-            self.framebuffers.remove(index);
         }
     }
 
     pub fn remove_all_framebuffers(&mut self, v_device: &VDevice) {
         unsafe {
-            for &framebuffer in self.framebuffers.iter() {
+            for (_, &framebuffer) in self.framebuffers.iter() {
                 v_device.device.destroy_framebuffer(framebuffer, None);
             }
         }
@@ -373,7 +376,7 @@ impl VRenderingSystem {
 
     pub fn destroy(&self, v_device: &VDevice) {
         unsafe {
-            for &framebuffer in self.framebuffers.iter() {
+            for (_, &framebuffer) in self.framebuffers.iter() {
                 v_device.device.destroy_framebuffer(framebuffer, None);
             }
             for &pipeline in self.pipelines.iter() {

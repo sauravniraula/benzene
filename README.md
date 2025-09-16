@@ -114,7 +114,7 @@ cargo run --release
 ```
 
 ### Shaders
-Precompiled SPIR‑V shaders are included in `assets/shaders/*.spv`. If you edit GLSL source, rebuild:
+Compiled SPIR‑V shaders are output to `compiled/shaders/` mirroring the layout of `assets/shaders/`. If you edit GLSL source, rebuild:
 
 ```bash
 ./compile_shaders.sh

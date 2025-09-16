@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SHADER_DIR="assets/shaders"
-OUTPUT_DIR="assets/shaders"
+OUTPUT_DIR="compiled/shaders"
 
 if ! command -v glslc &>/dev/null; then
     echo "Error: glslc not found. Please install Vulkan SDK or shaderc-tools."
@@ -12,7 +12,9 @@ mkdir -p "$OUTPUT_DIR"
 
 compile_shader() {
     local input_file="$1"
-    local output_file="${input_file}.spv"
+    local rel_path="${input_file#$SHADER_DIR/}"
+    local output_file="$OUTPUT_DIR/${rel_path}.spv"
+    mkdir -p "$(dirname "$output_file")"
     echo "Compiling $input_file -> $output_file"
     if glslc "$input_file" -o "$output_file"; then
         echo "✓ Successfully compiled $input_file"

@@ -3,6 +3,7 @@ use glfw::{Action, Key, WindowEvent};
 use std::time::Instant;
 use std::{collections::HashMap, time::Duration};
 
+use crate::core::ecs::entities::game_object::GameObject;
 use crate::{
     core::{
         ecs::{
@@ -87,6 +88,30 @@ impl GameEngine {
 
     pub fn set_active_scene(&mut self, scene: Scene) {
         self.active_scene = Some(scene);
+    }
+
+    pub fn enable_shadow_for_spot_light_3d(&mut self, entity: &GameObject) {
+        let scene = self.active_scene.as_mut().expect("No active scene");
+        scene
+            .shadow_mapping
+            .add_spot_light(&self.v_backend, *entity.get_id());
+        // self.scene_render
+        //     .v_shadow_rendering_system
+        //     .add_framebuffers(
+        //         &self.v_backend.v_device,
+        //         &[],
+        //         depth_views,
+        //         image_extent,
+        //         update_render_pass,
+        //         update_viewport,
+        //     );
+    }
+
+    pub fn disable_shadow_for_spot_light_3d(&mut self, entity: &GameObject) {
+        let scene = self.active_scene.as_mut().expect("No active scene");
+        scene
+            .shadow_mapping
+            .remove_spot_light(&self.v_backend, entity.get_id());
     }
 
     pub fn get_structure_3d_from_obj(&self, obj_path: &str) -> Structure3D {

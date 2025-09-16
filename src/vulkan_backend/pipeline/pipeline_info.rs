@@ -1,6 +1,7 @@
 use super::VPipelineInfoConfig;
 use crate::{
     shared::load_file_as_vec_u32,
+    utils::compiled_spirv_path_for_source,
     vulkan_backend::{
         descriptor::VDescriptorSetLayout, device::VDevice, push_constant::VPushConstant,
     },
@@ -19,12 +20,12 @@ impl VPipelineInfo {
     pub fn new(
         v_device: &VDevice,
         config: VPipelineInfoConfig,
-        v_push_constant: Option<VPushConstant>,
-        v_descriptor_set_layouts: &Vec<VDescriptorSetLayout>,
+        v_push_constant: Option<&VPushConstant>,
+        v_descriptor_set_layouts: &[&VDescriptorSetLayout],
     ) -> Self {
         let vert_shader_module: Option<vk::ShaderModule> = match &config.vertex_shader_file {
             Some(file) => {
-                let vert_shader_byte_code_path = format!("{}.spv", file);
+                let vert_shader_byte_code_path = compiled_spirv_path_for_source(file);
                 let vert_shader_code = load_file_as_vec_u32(&vert_shader_byte_code_path);
                 let vert_shader_module_create_info =
                     vk::ShaderModuleCreateInfo::default().code(&vert_shader_code);
@@ -40,7 +41,7 @@ impl VPipelineInfo {
 
         let frag_shader_module: Option<vk::ShaderModule> = match &config.fragment_shader_file {
             Some(file) => {
-                let frag_shader_byte_code_path = format!("{}.spv", file);
+                let frag_shader_byte_code_path = compiled_spirv_path_for_source(file);
                 let frag_shader_code = load_file_as_vec_u32(&frag_shader_byte_code_path);
                 let frag_shader_module_create_info =
                     vk::ShaderModuleCreateInfo::default().code(&frag_shader_code);

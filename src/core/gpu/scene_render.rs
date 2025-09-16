@@ -16,17 +16,16 @@ use crate::{
         vertex_input::{BindableVertexInput, Vertex3D},
     },
 };
-pub struct SceneRenderRecordContext<'a> {
-    pub v_device: &'a VDevice,
-    pub materials_manager: &'a MaterialsManager,
-    pub cmd: vk::CommandBuffer,
-    pub frame_index: usize,
-    pub pipeline_infos: &'a Vec<VPipelineInfo>,
-    pub descriptor_sets_layouts: &'a Vec<VDescriptorSetLayout>,
-}
-
 pub trait SceneRenderRecordable {
-    fn record(&self, ctx: &SceneRenderRecordContext);
+    fn record_geometry(
+        &self,
+        v_device: &VDevice,
+        materials_manager: &MaterialsManager,
+        cmd: vk::CommandBuffer,
+        frame_index: usize,
+        pipeline_infos: &Vec<VPipelineInfo>,
+        descriptor_sets_layouts: &Vec<VDescriptorSetLayout>,
+    );
 }
 
 pub trait SceneRenderDrawable {
@@ -34,8 +33,13 @@ pub trait SceneRenderDrawable {
 }
 
 pub struct SceneRender {
-    v_rendering_system: VRenderingSystem,
+    pub v_rendering_system: VRenderingSystem,
     pipeline_infos: Vec<VPipelineInfo>,
+
+    // shadow
+    pub v_shadow_rendering_system: VRenderingSystem,
+    shadow_pipeline_infos: Vec<VPipelineInfo>,
+
     pub descriptor_sets_layouts: Vec<VDescriptorSetLayout>,
 }
 
@@ -96,22 +100,21 @@ impl SceneRender {
                 }],
             },
         );
-        let descriptor_sets_layouts = vec![
-            global_uniform_layout,
-            lights_uniform_layout,
-            image_sampler_layout,
-        ];
 
         let pipeline_infos = vec![VPipelineInfo::new(
             &v_backend.v_device,
             VPipelineInfoConfig {
-                binding_descriptions: vertex_binding_descriptions,
-                attribute_descriptions: vertex_attribute_descriptions,
+                binding_descriptions: vertex_binding_descriptions.clone(),
+                attribute_descriptions: vertex_attribute_descriptions.clone(),
                 vertex_shader_file: Some("assets/shaders/shader.vert".into()),
                 fragment_shader_file: Some("assets/shaders/shader.frag".into()),
             },
-            Some(model_push_constant),
-            &descriptor_sets_layouts,
+            Some(&model_push_constant),
+            &[
+                &global_uniform_layout,
+                &lights_uniform_layout,
+                &image_sampler_layout,
+            ],
         )];
 
         let color_views = &v_backend.v_swapchain.v_image_views;
@@ -125,50 +128,59 @@ impl SceneRender {
                 depth_format: Some(v_backend.v_swapchain.depth_format),
                 color_final_layout: Some(vk::ImageLayout::PRESENT_SRC_KHR),
                 depth_final_layout: Some(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
+                dynamic_viewport: true,
             },
         );
-        v_rendering_system.add_framebuffers(
+        for (i, id) in v_backend.v_swapchain.image_ids.iter().copied().enumerate() {
+            v_rendering_system.add_framebuffer(
+                &v_backend.v_device,
+                id,
+                Some(&color_views[i]),
+                Some(depth_view),
+                v_backend.v_swapchain.image_extent,
+                i == 0,
+                i == 0,
+            );
+        }
+
+        let shadow_pipeline_infos = vec![VPipelineInfo::new(
             &v_backend.v_device,
-            color_views.as_slice(),
-            std::slice::from_ref(depth_view),
-            v_backend.v_swapchain.image_extent,
-        );
-        v_rendering_system.set_render_area(
-            0,
-            0,
-            v_backend.v_swapchain.image_extent.width,
-            v_backend.v_swapchain.image_extent.height,
-        );
+            VPipelineInfoConfig {
+                binding_descriptions: vertex_binding_descriptions,
+                attribute_descriptions: vertex_attribute_descriptions,
+                vertex_shader_file: Some("assets/shaders/shadow.vert".into()),
+                fragment_shader_file: None,
+            },
+            Some(&model_push_constant),
+            &[&global_uniform_layout],
+        )];
 
-        // let shadow_pipeline_infos = vec![VPipelineInfo::new(
-        //     &v_backend.v_device,
-        //     VPipelineInfoConfig {
-        //         binding_descriptions: vertex_binding_descriptions,
-        //         attribute_descriptions: vertex_attribute_descriptions,
-        //         vertex_shader_file: Some("assets/shaders/shadow.vert".into()),
-        //         fragment_shader_file: None,
-        //     },
-        //     Some(model_push_constant),
-        //     &vec![global_uniform_layout],
-        // )];
-
-        // let v_shadow_rendering_system = VRenderingSystem::new(
-        //     &v_backend.v_device,
-        //     VRenderingSystemConfig {
-        //         pipeline_infos: &shadow_pipeline_infos,
-        //         color_image_views: (),
-        //         depth_image_views: (),
-        //         color_format: (),
-        //         depth_format: (),
-        //         color_final_layout: (),
-        //         depth_final_layout: (),
-        //     },
-        // );
+        let v_shadow_rendering_system = VRenderingSystem::new(
+            &v_backend.v_device,
+            VRenderingSystemConfig {
+                pipeline_infos: &shadow_pipeline_infos,
+                color_format: None,
+                depth_format: Some(
+                    v_backend
+                        .v_physical_device
+                        .get_format_for_depth_stencil(&v_backend.v_instance),
+                ),
+                color_final_layout: None,
+                depth_final_layout: Some(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
+                dynamic_viewport: true,
+            },
+        );
 
         Self {
             v_rendering_system,
             pipeline_infos,
-            descriptor_sets_layouts,
+            v_shadow_rendering_system,
+            shadow_pipeline_infos,
+            descriptor_sets_layouts: vec![
+                global_uniform_layout,
+                lights_uniform_layout,
+                image_sampler_layout,
+            ],
         }
     }
 
@@ -180,18 +192,17 @@ impl SceneRender {
                 let color_views = &v_swapchain.v_image_views;
                 let depth_view = &v_swapchain.depth_v_image_view;
 
-                self.v_rendering_system.add_framebuffers(
-                    v_device,
-                    color_views.as_slice(),
-                    std::slice::from_ref(depth_view),
-                    v_swapchain.image_extent,
-                );
-                self.v_rendering_system.set_render_area(
-                    0,
-                    0,
-                    v_swapchain.image_extent.width,
-                    v_swapchain.image_extent.height,
-                );
+                for (i, id) in v_swapchain.image_ids.iter().copied().enumerate() {
+                    self.v_rendering_system.add_framebuffer(
+                        v_device,
+                        id,
+                        Some(&color_views[i]),
+                        Some(depth_view),
+                        v_swapchain.image_extent,
+                        i == 0,
+                        i == 0,
+                    );
+                }
             }
             _ => {}
         }
@@ -204,8 +215,17 @@ impl SceneRender {
         info: &VRenderInfo,
         recordables: &[&dyn SceneRenderRecordable],
     ) {
+        // Shadow Pass
+        if !self.v_shadow_rendering_system.framebuffers.is_empty() {
+            self.v_shadow_rendering_system
+                .start(v_device, info.command_buffer, &info.image_id);
+
+            self.v_shadow_rendering_system.end(v_device, info);
+        }
+
+        // Geometry Pass
         self.v_rendering_system
-            .start(v_device, info.command_buffer, info.image_index);
+            .start(v_device, info.command_buffer, &info.image_id);
 
         unsafe {
             v_device.device.cmd_bind_pipeline(
@@ -215,29 +235,31 @@ impl SceneRender {
             )
         };
 
-        let ctx = SceneRenderRecordContext {
-            v_device,
-            materials_manager: materials_manager,
-            cmd: info.command_buffer,
-            frame_index: info.frame_index,
-            pipeline_infos: &self.pipeline_infos,
-            descriptor_sets_layouts: &self.descriptor_sets_layouts,
-        };
-
         for recordable in recordables.iter() {
-            recordable.record(&ctx);
+            recordable.record_geometry(
+                v_device,
+                materials_manager,
+                info.command_buffer,
+                info.frame_index,
+                &self.pipeline_infos,
+                &self.descriptor_sets_layouts,
+            );
         }
 
         self.v_rendering_system.end(v_device, info);
     }
 
     pub fn destroy(&self, v_device: &VDevice) {
+        for each in self.shadow_pipeline_infos.iter() {
+            each.destroy(v_device);
+        }
         for each in self.pipeline_infos.iter() {
             each.destroy(v_device);
         }
         for each in self.descriptor_sets_layouts.iter() {
             each.destroy(v_device);
         }
+        self.v_shadow_rendering_system.destroy(v_device);
         self.v_rendering_system.destroy(v_device);
     }
 }

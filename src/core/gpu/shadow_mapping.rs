@@ -1,26 +1,31 @@
+use std::collections::HashMap;
+
 use ash::vk;
 
-use crate::vulkan_backend::{
-    backend::VBackend,
-    memory::image::{VImage, VImageConfig, image_view::VImageView, sampler::VSampler},
+use crate::{
+    core::ecs::types::Id,
+    vulkan_backend::{
+        backend::VBackend,
+        memory::image::{VImage, VImageConfig, image_view::VImageView, sampler::VSampler},
+    },
 };
 
 pub struct ShadowMapping {
-    pub spot_light_maps: Vec<VImage>,
-    pub spot_light_views: Vec<VImageView>,
-    pub spot_light_samplers: Vec<VSampler>,
+    pub spot_light_maps: HashMap<Id, VImage>,
+    pub spot_light_views: HashMap<Id, VImageView>,
+    pub spot_light_samplers: HashMap<Id, VSampler>,
 }
 
 impl ShadowMapping {
     pub fn new() -> Self {
         Self {
-            spot_light_maps: Vec::new(),
-            spot_light_views: Vec::new(),
-            spot_light_samplers: Vec::new(),
+            spot_light_maps: HashMap::new(),
+            spot_light_views: HashMap::new(),
+            spot_light_samplers: HashMap::new(),
         }
     }
 
-    pub fn add_spot_light(&mut self, v_backend: &VBackend) {
+    pub fn add_spot_light(&mut self, v_backend: &VBackend, entity_id: Id) {
         let extent = v_backend.v_swapchain.image_extent;
         let spot_light_map = VImage::new(
             &v_backend.v_device,
@@ -50,8 +55,33 @@ impl ShadowMapping {
         );
         let spot_light_sampler = VSampler::new(&v_backend.v_device, &v_backend.v_physical_device);
 
-        self.spot_light_maps.push(spot_light_map);
-        self.spot_light_views.push(spot_light_map_view);
-        self.spot_light_samplers.push(spot_light_sampler);
+        self.spot_light_maps.insert(entity_id, spot_light_map);
+        self.spot_light_views.insert(entity_id, spot_light_map_view);
+        self.spot_light_samplers
+            .insert(entity_id, spot_light_sampler);
+    }
+
+    pub fn remove_spot_light(&mut self, v_backend: &VBackend, entity_id: &Id) {
+        if let Some(image) = self.spot_light_maps.remove(entity_id) {
+            image.destroy(&v_backend.v_device, &v_backend.v_memory_manager);
+        }
+        if let Some(view) = self.spot_light_views.remove(entity_id) {
+            view.destroy(&v_backend.v_device);
+        }
+        if let Some(sampler) = self.spot_light_samplers.remove(entity_id) {
+            sampler.destroy(&v_backend.v_device);
+        }
+    }
+
+    pub fn destroy(&mut self, v_backend: &VBackend) {
+        for (_, image) in self.spot_light_maps.drain() {
+            image.destroy(&v_backend.v_device, &v_backend.v_memory_manager);
+        }
+        for (_, view) in self.spot_light_views.drain() {
+            view.destroy(&v_backend.v_device);
+        }
+        for (_, sampler) in self.spot_light_samplers.drain() {
+            sampler.destroy(&v_backend.v_device);
+        }
     }
 }

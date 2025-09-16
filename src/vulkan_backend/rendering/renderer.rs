@@ -104,7 +104,7 @@ impl VRenderer {
             Ok((command_buffer, image_index)) => {
                 render(VRenderInfo {
                     command_buffer,
-                    image_index,
+                    image_id: v_swapchain.image_ids[image_index],
                     frame_index,
                 });
 
