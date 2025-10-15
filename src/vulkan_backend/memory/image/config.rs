@@ -15,6 +15,15 @@ pub struct VImageConfig {
     pub samples: vk::SampleCountFlags,
 }
 
+impl VImageConfig {
+    pub fn get_extent_2d(&self) -> vk::Extent2D {
+        vk::Extent2D {
+            width: self.extent.width,
+            height: self.extent.height,
+        }
+    }
+}
+
 pub struct VImageViewConfig {
     pub view_type: vk::ImageViewType,
     pub format: vk::Format,
@@ -88,5 +97,3 @@ impl VImageConfig {
         }
     }
 }
-
-

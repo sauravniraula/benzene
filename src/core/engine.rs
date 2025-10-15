@@ -95,16 +95,27 @@ impl GameEngine {
         scene
             .shadow_mapping
             .add_spot_light(&self.v_backend, *entity.get_id());
-        // self.scene_render
-        //     .v_shadow_rendering_system
-        //     .add_framebuffers(
-        //         &self.v_backend.v_device,
-        //         &[],
-        //         depth_views,
-        //         image_extent,
-        //         update_render_pass,
-        //         update_viewport,
-        //     );
+
+        let shadow_map = scene
+            .shadow_mapping
+            .spot_light_maps
+            .get(entity.get_id())
+            .unwrap();
+        let shadow_map_view = scene
+            .shadow_mapping
+            .spot_light_views
+            .get(entity.get_id())
+            .unwrap();
+
+        self.scene_render.v_shadow_rendering_system.add_framebuffer(
+            &self.v_backend.v_device,
+            *entity.get_id(),
+            None,
+            Some(shadow_map_view),
+            shadow_map.config.get_extent_2d(),
+            true,
+            true,
+        );
     }
 
     pub fn disable_shadow_for_spot_light_3d(&mut self, entity: &GameObject) {
@@ -112,6 +123,9 @@ impl GameEngine {
         scene
             .shadow_mapping
             .remove_spot_light(&self.v_backend, entity.get_id());
+        self.scene_render
+            .v_shadow_rendering_system
+            .remove_framebuffer(&self.v_backend.v_device, entity.get_id());
     }
 
     pub fn get_structure_3d_from_obj(&self, obj_path: &str) -> Structure3D {
