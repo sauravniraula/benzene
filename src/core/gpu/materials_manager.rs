@@ -1,6 +1,6 @@
 use crate::vulkan_backend::{
     descriptor::{
-        VDescriptorPool, VDescriptorSetLayout, VDescriptorSets,
+        VDescriptorPool, VDescriptorSet, VDescriptorSetLayout,
         config::{VDescriptorPoolConfig, VDescriptorPoolTypeConfig},
     },
     device::VDevice,
@@ -9,7 +9,7 @@ use ash::vk;
 
 pub struct MaterialsManager {
     descriptor_pool: VDescriptorPool,
-    descriptor_sets: Vec<VDescriptorSets>,
+    descriptor_sets: Vec<VDescriptorSet>,
 }
 
 impl MaterialsManager {
@@ -29,7 +29,7 @@ impl MaterialsManager {
         }
     }
 
-    pub fn get_sets_at(&self, index: usize) -> &VDescriptorSets {
+    pub fn get_set_at(&self, index: usize) -> &VDescriptorSet {
         return &self.descriptor_sets[index];
     }
 
@@ -38,10 +38,10 @@ impl MaterialsManager {
         v_device: &VDevice,
         v_layout: &VDescriptorSetLayout,
     ) -> usize {
-        self.descriptor_sets.push(VDescriptorSets::new(
+        self.descriptor_sets.push(VDescriptorSet::new(
             v_device,
             &self.descriptor_pool,
-            std::slice::from_ref(v_layout),
+            v_layout,
         ));
         return self.descriptor_sets.len() - 1;
     }

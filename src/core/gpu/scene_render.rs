@@ -40,7 +40,7 @@ pub struct SceneRender {
     pub v_shadow_rendering_system: VRenderingSystem,
     shadow_pipeline_infos: Vec<VPipelineInfo>,
 
-    pub descriptor_sets_layouts: Vec<VDescriptorSetLayout>,
+    pub descriptor_set_layouts: Vec<VDescriptorSetLayout>,
 }
 
 impl SceneRender {
@@ -176,7 +176,7 @@ impl SceneRender {
             pipeline_infos,
             v_shadow_rendering_system,
             shadow_pipeline_infos,
-            descriptor_sets_layouts: vec![
+            descriptor_set_layouts: vec![
                 global_uniform_layout,
                 lights_uniform_layout,
                 image_sampler_layout,
@@ -242,7 +242,7 @@ impl SceneRender {
                 info.command_buffer,
                 info.frame_index,
                 &self.pipeline_infos,
-                &self.descriptor_sets_layouts,
+                &self.descriptor_set_layouts,
             );
         }
 
@@ -256,7 +256,7 @@ impl SceneRender {
         for each in self.pipeline_infos.iter() {
             each.destroy(v_device);
         }
-        for each in self.descriptor_sets_layouts.iter() {
+        for each in self.descriptor_set_layouts.iter() {
             each.destroy(v_device);
         }
         self.v_shadow_rendering_system.destroy(v_device);

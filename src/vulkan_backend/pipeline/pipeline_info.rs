@@ -95,18 +95,18 @@ impl VPipelineInfo {
         }
     }
 
-    pub fn get_vertex_input_state(&self) -> vk::PipelineVertexInputStateCreateInfo {
+    pub fn get_vertex_input_state(&self) -> vk::PipelineVertexInputStateCreateInfo<'_> {
         vk::PipelineVertexInputStateCreateInfo::default()
             .vertex_binding_descriptions(&self.config.binding_descriptions)
             .vertex_attribute_descriptions(&self.config.attribute_descriptions)
     }
 
-    pub fn get_input_assembly_state(&self) -> vk::PipelineInputAssemblyStateCreateInfo {
+    pub fn get_input_assembly_state(&self) -> vk::PipelineInputAssemblyStateCreateInfo<'_> {
         vk::PipelineInputAssemblyStateCreateInfo::default()
             .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
     }
 
-    pub fn get_shader_states(&self) -> Vec<vk::PipelineShaderStageCreateInfo> {
+    pub fn get_shader_states(&self) -> Vec<vk::PipelineShaderStageCreateInfo<'_>> {
         let mut stages: Vec<vk::PipelineShaderStageCreateInfo> = Vec::new();
         if let Some(module) = self.vert_shader_module {
             stages.push(
@@ -127,14 +127,14 @@ impl VPipelineInfo {
         stages
     }
 
-    pub fn get_rasterization_state(&self) -> vk::PipelineRasterizationStateCreateInfo {
+    pub fn get_rasterization_state(&self) -> vk::PipelineRasterizationStateCreateInfo<'_> {
         vk::PipelineRasterizationStateCreateInfo::default()
             .line_width(1.0)
             .cull_mode(vk::CullModeFlags::BACK)
             .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
     }
 
-    pub fn get_depth_stencil_state(&self) -> vk::PipelineDepthStencilStateCreateInfo {
+    pub fn get_depth_stencil_state(&self) -> vk::PipelineDepthStencilStateCreateInfo<'_> {
         vk::PipelineDepthStencilStateCreateInfo::default()
             .depth_test_enable(true)
             .depth_write_enable(true)
@@ -143,24 +143,24 @@ impl VPipelineInfo {
             .stencil_test_enable(false)
     }
 
-    pub fn get_multisampling_state(&self) -> vk::PipelineMultisampleStateCreateInfo {
+    pub fn get_multisampling_state(&self) -> vk::PipelineMultisampleStateCreateInfo<'_> {
         vk::PipelineMultisampleStateCreateInfo::default()
             .sample_shading_enable(false)
             .rasterization_samples(vk::SampleCountFlags::TYPE_1)
     }
 
-    pub fn get_color_blend_state(&self) -> vk::PipelineColorBlendStateCreateInfo {
+    pub fn get_color_blend_state(&self) -> vk::PipelineColorBlendStateCreateInfo<'_> {
         vk::PipelineColorBlendStateCreateInfo::default()
             .attachments(&self.color_blend_attachments)
             .logic_op_enable(false)
     }
 
-    pub fn get_dynamic_state(&self) -> vk::PipelineDynamicStateCreateInfo {
+    pub fn get_dynamic_state(&self) -> vk::PipelineDynamicStateCreateInfo<'_> {
         vk::PipelineDynamicStateCreateInfo::default()
             .dynamic_states(&[vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR])
     }
 
-    pub fn get_viewport_state(&self) -> vk::PipelineViewportStateCreateInfo {
+    pub fn get_viewport_state(&self) -> vk::PipelineViewportStateCreateInfo<'_> {
         vk::PipelineViewportStateCreateInfo::default()
             .viewport_count(1)
             .scissor_count(1)

@@ -9,21 +9,19 @@ use crate::vulkan_backend::{
     },
 };
 
-pub struct VDescriptorSets {
-    pub sets: Vec<vk::DescriptorSet>,
-    pub count: usize,
+pub struct VDescriptorSet {
+    pub set: vk::DescriptorSet,
 }
 
-impl VDescriptorSets {
+impl VDescriptorSet {
     pub fn new(
         v_device: &VDevice,
         v_pool: &VDescriptorPool,
-        v_layouts: &[VDescriptorSetLayout],
+        v_layout: &VDescriptorSetLayout,
     ) -> Self {
-        let layouts: Vec<vk::DescriptorSetLayout> = v_layouts.iter().map(|l| l.layout).collect();
         let alloc_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(v_pool.pool)
-            .set_layouts(&layouts);
+            .set_layouts(std::slice::from_ref(&v_layout.layout));
 
         let sets = unsafe {
             v_device
@@ -32,100 +30,90 @@ impl VDescriptorSets {
                 .expect("failed to allocate descriptor sets")
         };
 
-        Self {
-            sets,
-            count: layouts.len(),
-        }
+        Self { set: sets[0] }
     }
 
     pub fn queue_buffer(
         &self,
         batch: &mut VDescriptorWriteBatch,
-        set_index: usize,
-        binding: u32,
         descriptor_type: vk::DescriptorType,
+        binding: u32,
         v_buffer: &VBuffer,
     ) {
-        assert!(set_index < self.count, "set_index out of range");
         batch.queue_buffer(
-            self.sets[set_index],
-            binding,
+            self.set,
             descriptor_type,
+            binding,
             v_buffer.buffer,
+            0,
             vk::WHOLE_SIZE,
         );
     }
 
-    pub fn queue_buffer_all_sets(
-        &self,
-        batch: &mut VDescriptorWriteBatch,
-        binding: u32,
-        descriptor_type: vk::DescriptorType,
-        v_buffers: &[&VBuffer],
-    ) {
-        assert!(
-            self.count == v_buffers.len(),
-            "length of descriptor set is not same as length of provided buffers",
-        );
-        let mut index = 0;
-        loop {
-            if index == self.count {
-                break;
-            }
-            self.queue_buffer(batch, index, binding, descriptor_type, v_buffers[index]);
-            index += 1;
-        }
-    }
+    // pub fn queue_buffer_all_sets(
+    //     &self,
+    //     batch: &mut VDescriptorWriteBatch,
+    //     binding: u32,
+    //     descriptor_type: vk::DescriptorType,
+    //     v_buffers: &[&VBuffer],
+    // ) {
+    //     let mut index = 0;
+    //     loop {
+    //         if index == self.count {
+    //             break;
+    //         }
+    //         self.queue_buffer(batch, index, binding, descriptor_type, v_buffers[index]);
+    //         index += 1;
+    //     }
+    // }
 
     pub fn queue_image(
         &self,
         batch: &mut VDescriptorWriteBatch,
-        set_index: usize,
-        binding: u32,
         descriptor_type: vk::DescriptorType,
+        binding: u32,
         v_image_view: &VImageView,
         v_sampler: &VSampler,
         image_layout: vk::ImageLayout,
     ) {
-        assert!(set_index < self.count, "set_index out of range");
         batch.queue_image(
-            self.sets[set_index],
-            binding,
+            self.set,
             descriptor_type,
+            binding,
             v_image_view.image_view,
             v_sampler.sampler,
             image_layout,
         );
     }
 
-    pub fn queue_image_all_sets(
-        &self,
-        batch: &mut VDescriptorWriteBatch,
-        binding: u32,
-        descriptor_type: vk::DescriptorType,
-        v_image_views: &[&VImageView],
-        v_samplers: &[&VSampler],
-        image_layout: vk::ImageLayout,
-    ) {
-        assert!(
-            v_image_views.len() == self.count && v_samplers.len() == self.count,
-            "image views and samplers must match descriptor set count",
-        );
-        let mut index = 0;
-        loop {
-            if index == self.count {
-                break;
-            }
-            self.queue_image(
-                batch,
-                index,
-                binding,
-                descriptor_type,
-                v_image_views[index],
-                v_samplers[index],
-                image_layout,
-            );
-            index += 1;
-        }
-    }
+    // pub fn queue_image_all_sets(
+    //     &self,
+    //     batch: &mut VDescriptorWriteBatch,
+    //     binding: u32,
+    //     descriptor_type: vk::DescriptorType,
+    //     v_image_views: &[&VImageView],
+    //     v_samplers: &[&VSampler],
+    //     image_layout: vk::ImageLayout,
+    // ) {
+    //     assert!(
+    //         v_image_views.len() == self.count && v_samplers.len() == self.count,
+    //         "image views and samplers must match descriptor set count",
+    //     );
+    //     let mut index = 0;
+    //     loop {
+    //         if index == self.count {
+    //             break;
+    //         }
+    //         self.queue_image(
+    //             batch,
+    //             index,
+    //             binding,
+    //             descriptor_type,
+    //             v_image_views[index],
+    //             v_samplers[index],
+    //             image_layout,
+    //         );
+    //         index += 1;
+    //     }
+    // }
 }

@@ -4,7 +4,7 @@ use nalgebra::Vector4;
 
 use crate::vulkan_backend::{
     backend::VBackend,
-    descriptor::{VDescriptorSets, VDescriptorWriteBatch},
+    descriptor::{VDescriptorSet, VDescriptorWriteBatch},
     memory::VUniformBuffer,
 };
 
@@ -34,16 +34,12 @@ impl PointLightUniform {
         Self { uniform_buffer }
     }
 
-    pub fn queue_descriptor_writes(
-        &self,
-        sets: &VDescriptorSets,
-        batch: &mut VDescriptorWriteBatch,
-    ) {
-        sets.queue_buffer_all_sets(
+    pub fn queue_descriptor_writes(&self, set: &VDescriptorSet, batch: &mut VDescriptorWriteBatch) {
+        set.queue_buffer(
             batch,
-            0,
             vk::DescriptorType::UNIFORM_BUFFER,
-            &[&self.uniform_buffer.v_buffer],
+            0,
+            &self.uniform_buffer.v_buffer,
         );
     }
 

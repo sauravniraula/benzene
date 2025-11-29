@@ -27,11 +27,11 @@ use crate::{
     vulkan_backend::{
         backend::VBackend,
         backend_event::VBackendEvent,
-        device::VDevice,
         descriptor::{
-            VDescriptorPool, VDescriptorSetLayout, VDescriptorSets, VDescriptorWriteBatch,
+            VDescriptorPool, VDescriptorSet, VDescriptorSetLayout, VDescriptorWriteBatch,
             config::{VDescriptorPoolConfig, VDescriptorPoolTypeConfig},
         },
+        device::VDevice,
         pipeline::VPipelineInfo,
     },
 };
@@ -45,8 +45,8 @@ pub struct Scene {
     default_descriptor_pool: VDescriptorPool,
 
     // Default Descriptor Sets
-    pub global_uniform_sets: VDescriptorSets,
-    pub lights_sets: VDescriptorSets,
+    pub global_uniform_set: VDescriptorSet,
+    pub lights_set: VDescriptorSet,
 
     // ECS
     active_camera: Option<Id>,
@@ -100,16 +100,16 @@ impl Scene {
             },
         );
 
-        // Create defautl descriptor sets
-        let global_uniform_sets = VDescriptorSets::new(
+        // Create default descriptor sets
+        let global_uniform_set = VDescriptorSet::new(
             &v_backend.v_device,
             &default_descriptor_pool,
-            &scene_render.descriptor_sets_layouts[0..1],
+            &scene_render.descriptor_set_layouts[0],
         );
-        let lights_sets = VDescriptorSets::new(
+        let lights_set = VDescriptorSet::new(
             &v_backend.v_device,
             &default_descriptor_pool,
-            &scene_render.descriptor_sets_layouts[1..2],
+            &scene_render.descriptor_set_layouts[1],
         );
 
         // Attaching to descriptor sets
@@ -120,17 +120,17 @@ impl Scene {
         let texture = ImageTexture::empty(v_backend, vk::Format::R8G8B8A8_SRGB);
         {
             let mut batch = VDescriptorWriteBatch::new();
-            global_uniform.queue_descriptor_writes(&global_uniform_sets, &mut batch);
-            point_light_uniform.queue_descriptor_writes(&lights_sets, &mut batch);
-            directional_light_uniform.queue_descriptor_writes(&lights_sets, &mut batch);
-            spot_light_uniform.queue_descriptor_writes(&lights_sets, &mut batch);
+            global_uniform.queue_descriptor_writes(&global_uniform_set, &mut batch);
+            point_light_uniform.queue_descriptor_writes(&lights_set, &mut batch);
+            directional_light_uniform.queue_descriptor_writes(&lights_set, &mut batch);
+            spot_light_uniform.queue_descriptor_writes(&lights_set, &mut batch);
             batch.flush(&v_backend.v_device);
         }
 
         let mut scene = Self {
             default_descriptor_pool,
-            global_uniform_sets,
-            lights_sets,
+            global_uniform_set,
+            lights_set,
             active_camera: None,
             global_uniform,
             point_light_uniform,
@@ -394,7 +394,7 @@ impl SceneRenderRecordable for Scene {
                 vk::PipelineBindPoint::GRAPHICS,
                 pipeline_infos[0].layout,
                 0,
-                &[self.global_uniform_sets.sets[0], self.lights_sets.sets[0]],
+                &[self.global_uniform_set.set, self.lights_set.set],
                 &[],
             );
         }
@@ -412,7 +412,7 @@ impl SceneRenderRecordable for Scene {
                         vk::PipelineBindPoint::GRAPHICS,
                         pipeline_infos[0].layout,
                         2,
-                        &[materials_manager.get_sets_at(material_3d_index).sets[0]],
+                        &[materials_manager.get_set_at(material_3d_index).set],
                         &[],
                     );
                 }

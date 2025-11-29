@@ -4,7 +4,7 @@ use nalgebra::{Matrix4, Vector4};
 
 use crate::vulkan_backend::{
     backend::VBackend,
-    descriptor::{VDescriptorSets, VDescriptorWriteBatch},
+    descriptor::{VDescriptorSet, VDescriptorWriteBatch},
     memory::VUniformBuffer,
 };
 
@@ -44,17 +44,15 @@ impl GlobalUniform {
         }
     }
 
-    pub fn queue_descriptor_writes(
-        &self,
-        sets: &VDescriptorSets,
-        batch: &mut VDescriptorWriteBatch,
-    ) {
-        sets.queue_buffer_all_sets(batch, 0, vk::DescriptorType::UNIFORM_BUFFER, &self
-            .uniform_buffers
-            .iter()
-            .map(|e| &e.v_buffer)
-            .collect::<Vec<_>>()
-        );
+    pub fn queue_descriptor_writes(&self, set: &VDescriptorSet, batch: &mut VDescriptorWriteBatch) {
+        for idx in 0..self.count {
+            set.queue_buffer(
+                batch,
+                vk::DescriptorType::UNIFORM_BUFFER,
+                0,
+                &self.uniform_buffers[idx].v_buffer,
+            );
+        }
     }
 
     pub fn update_view(&mut self, v_backend: &VBackend, index: usize, value: &Matrix4<f32>) {

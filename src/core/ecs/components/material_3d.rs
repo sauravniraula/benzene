@@ -16,19 +16,13 @@ impl Material3D {
         texture: &ImageTexture,
         batch: &mut VDescriptorWriteBatch,
     ) {
-        let sets = manager.get_sets_at(self.manager_index);
-        let views = (0..sets.count)
-            .map(|_| &texture.image_view)
-            .collect::<Vec<_>>();
-        let samplers = (0..sets.count)
-            .map(|_| &texture.sampler)
-            .collect::<Vec<_>>();
-        sets.queue_image_all_sets(
+        let set = manager.get_set_at(self.manager_index);
+        set.queue_image(
             batch,
-            0,
             vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            &views,
-            &samplers,
+            0,
+            &texture.image_view,
+            &texture.sampler,
             vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
         );
     }

@@ -64,7 +64,7 @@ impl GameEngine {
         self.textures.insert(default_texture_id, default_texture);
         let default_material_index = self.materials_manager.allocate_material(
             &self.v_backend.v_device,
-            &self.scene_render.descriptor_sets_layouts[2],
+            &self.scene_render.descriptor_set_layouts[2],
         );
         let default_material = Material3D {
             manager_index: default_material_index,
@@ -146,7 +146,7 @@ impl GameEngine {
             .expect("invalid texture id passed to get_material_3d_from_texture");
         let allocated_sets_index = self.materials_manager.allocate_material(
             &self.v_backend.v_device,
-            &self.scene_render.descriptor_sets_layouts[2],
+            &self.scene_render.descriptor_set_layouts[2],
         );
 
         let mut batch_writer = VDescriptorWriteBatch::new();

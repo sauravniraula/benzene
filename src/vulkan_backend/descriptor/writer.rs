@@ -2,26 +2,29 @@ use ash::vk;
 
 use crate::vulkan_backend::device::VDevice;
 
-enum PendingWrite {
+pub enum PendingDescriptorWrite {
     Buffer {
-        dst_set: vk::DescriptorSet,
+        set: vk::DescriptorSet,
+        d_type: vk::DescriptorType,
         binding: u32,
-        descriptor_type: vk::DescriptorType,
+        array_index: u32,
         buffer: vk::Buffer,
+        offset: u32,
         range: vk::DeviceSize,
     },
     Image {
-        dst_set: vk::DescriptorSet,
+        set: vk::DescriptorSet,
+        d_type: vk::DescriptorType,
         binding: u32,
-        descriptor_type: vk::DescriptorType,
-        image_view: vk::ImageView,
+        array_index: u32,
+        view: vk::ImageView,
         sampler: vk::Sampler,
-        image_layout: vk::ImageLayout,
+        layout: vk::ImageLayout,
     },
 }
 
 pub struct VDescriptorWriteBatch {
-    pending: Vec<PendingWrite>,
+    pending: Vec<PendingDescriptorWrite>,
 }
 
 impl Default for VDescriptorWriteBatch {
@@ -39,136 +42,126 @@ impl VDescriptorWriteBatch {
 
     pub fn queue_buffer(
         &mut self,
-        dst_set: vk::DescriptorSet,
+        set: vk::DescriptorSet,
+        d_type: vk::DescriptorType,
         binding: u32,
-        descriptor_type: vk::DescriptorType,
         buffer: vk::Buffer,
+        offset: u32,
         range: vk::DeviceSize,
     ) {
-        self.pending.push(PendingWrite::Buffer {
-            dst_set,
+        self.pending.push(PendingDescriptorWrite::Buffer {
+            set,
+            d_type,
             binding,
-            descriptor_type,
+            array_index: 0,
             buffer,
+            offset,
             range,
         });
     }
 
     pub fn queue_image(
         &mut self,
-        dst_set: vk::DescriptorSet,
+        set: vk::DescriptorSet,
+        d_type: vk::DescriptorType,
         binding: u32,
-        descriptor_type: vk::DescriptorType,
-        image_view: vk::ImageView,
+        view: vk::ImageView,
         sampler: vk::Sampler,
-        image_layout: vk::ImageLayout,
+        layout: vk::ImageLayout,
     ) {
-        self.pending.push(PendingWrite::Image {
-            dst_set,
+        self.pending.push(PendingDescriptorWrite::Image {
+            set,
+            d_type,
             binding,
-            descriptor_type,
-            image_view,
+            array_index: 0,
+            view,
             sampler,
-            image_layout,
-        });
+            layout,
+        })
     }
 
     pub fn flush(self, v_device: &VDevice) {
-        struct WritePlan {
-            dst_set: vk::DescriptorSet,
-            binding: u32,
-            descriptor_type: vk::DescriptorType,
-            is_buffer: bool,
-            info_index: usize,
-        }
+        let mut buffer_infos: Vec<vk::DescriptorBufferInfo> = vec![];
+        let mut image_infos: Vec<vk::DescriptorImageInfo> = vec![];
+        let mut writes: Vec<vk::WriteDescriptorSet> = vec![];
 
-        let (buffer_count, image_count) =
-            self.pending
-                .iter()
-                .fold((0usize, 0usize), |acc, p| match p {
-                    PendingWrite::Buffer { .. } => (acc.0 + 1, acc.1),
-                    PendingWrite::Image { .. } => (acc.0, acc.1 + 1),
-                });
-
-        let mut buffer_infos: Vec<vk::DescriptorBufferInfo> = Vec::with_capacity(buffer_count);
-        let mut image_infos: Vec<vk::DescriptorImageInfo> = Vec::with_capacity(image_count);
-        let mut plans: Vec<WritePlan> = Vec::with_capacity(self.pending.len());
-
-        for p in &self.pending {
-            match *p {
-                PendingWrite::Buffer {
-                    dst_set,
-                    binding,
-                    descriptor_type,
+        for each in self.pending.iter() {
+            match each {
+                PendingDescriptorWrite::Buffer {
                     buffer,
+                    offset,
                     range,
+                    ..
                 } => {
-                    let idx = buffer_infos.len();
                     buffer_infos.push(
                         vk::DescriptorBufferInfo::default()
-                            .buffer(buffer)
-                            .offset(0)
-                            .range(range),
+                            .buffer(*buffer)
+                            .offset(*offset as vk::DeviceSize)
+                            .range(*range),
                     );
-                    plans.push(WritePlan {
-                        dst_set,
-                        binding,
-                        descriptor_type,
-                        is_buffer: true,
-                        info_index: idx,
-                    });
                 }
-                PendingWrite::Image {
-                    dst_set,
-                    binding,
-                    descriptor_type,
-                    image_view,
+                PendingDescriptorWrite::Image {
+                    view,
                     sampler,
-                    image_layout,
+                    layout,
+                    ..
                 } => {
-                    let idx = image_infos.len();
                     image_infos.push(
                         vk::DescriptorImageInfo::default()
-                            .image_layout(image_layout)
-                            .image_view(image_view)
-                            .sampler(sampler),
+                            .image_layout(*layout)
+                            .image_view(*view)
+                            .sampler(*sampler),
                     );
-                    plans.push(WritePlan {
-                        dst_set,
-                        binding,
-                        descriptor_type,
-                        is_buffer: false,
-                        info_index: idx,
-                    });
                 }
             }
         }
 
-        let mut writes: Vec<vk::WriteDescriptorSet> = Vec::with_capacity(plans.len());
-        for plan in plans {
-            if plan.is_buffer {
-                writes.push(
-                    vk::WriteDescriptorSet::default()
-                        .dst_set(plan.dst_set)
-                        .dst_binding(plan.binding)
-                        .dst_array_element(0)
-                        .descriptor_type(plan.descriptor_type)
-                        .descriptor_count(1)
-                        .buffer_info(&buffer_infos[plan.info_index..plan.info_index + 1]),
-                );
-            } else {
-                writes.push(
-                    vk::WriteDescriptorSet::default()
-                        .dst_set(plan.dst_set)
-                        .dst_binding(plan.binding)
-                        .dst_array_element(0)
-                        .descriptor_type(plan.descriptor_type)
-                        .descriptor_count(1)
-                        .image_info(&image_infos[plan.info_index..plan.info_index + 1]),
-                );
+        let mut buffer_idx: usize = 0;
+        let mut image_idx: usize = 0;
+
+        for each in self.pending {
+            match each {
+                PendingDescriptorWrite::Buffer {
+                    set,
+                    d_type,
+                    binding,
+                    array_index,
+                    ..
+                } => {
+                    writes.push(
+                        vk::WriteDescriptorSet::default()
+                            .dst_set(set)
+                            .dst_binding(binding)
+                            .dst_array_element(array_index)
+                            .descriptor_type(d_type)
+                            .descriptor_count(1)
+                            .buffer_info(&buffer_infos[buffer_idx..buffer_idx + 1]),
+                    );
+                    buffer_idx += 1;
+                }
+                PendingDescriptorWrite::Image {
+                    set,
+                    d_type,
+                    binding,
+                    array_index,
+                    ..
+                } => {
+                    writes.push(
+                        vk::WriteDescriptorSet::default()
+                            .dst_set(set)
+                            .dst_binding(binding)
+                            .dst_array_element(array_index)
+                            .descriptor_type(d_type)
+                            .descriptor_count(1)
+                            .image_info(&image_infos[image_idx..image_idx + 1]),
+                    );
+                    image_idx += 1;
+                }
             }
         }
 
-        unsafe { v_device.device.update_descriptor_sets(&writes, &[]) };
+        unsafe {
+            v_device.device.update_descriptor_sets(&writes, &[]);
+        }
     }
 }
