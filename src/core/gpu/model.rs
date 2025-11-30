@@ -1,7 +1,7 @@
 use ash::vk;
 
 use crate::{
-    core::gpu::scene_render::SceneRenderDrawable,
+    core::gpu::scene_render::DrawableSceneElement,
     vulkan_backend::{
         backend::VBackend,
         device::VDevice,
@@ -106,23 +106,23 @@ impl Model {
     }
 }
 
-impl SceneRenderDrawable for Model {
-    fn draw(&self, v_device: &VDevice, command_buffer: vk::CommandBuffer) {
+impl DrawableSceneElement for Model {
+    fn draw(&self, v_device: &VDevice, cmd: vk::CommandBuffer) {
         unsafe {
             let vertex_buffers = [self.v_buffer.buffer];
             let offsets = [0u64];
             v_device
                 .device
-                .cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &offsets);
+                .cmd_bind_vertex_buffers(cmd, 0, &vertex_buffers, &offsets);
             v_device.device.cmd_bind_index_buffer(
-                command_buffer,
+                cmd,
                 self.i_buffer.buffer,
                 0,
                 vk::IndexType::UINT32,
             );
             v_device
                 .device
-                .cmd_draw_indexed(command_buffer, self.index_count, 1, 0, 0, 0);
+                .cmd_draw_indexed(cmd, self.index_count, 1, 0, 0, 0);
         }
     }
 }

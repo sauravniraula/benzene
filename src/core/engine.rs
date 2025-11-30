@@ -4,22 +4,19 @@ use std::time::Instant;
 use std::{collections::HashMap, time::Duration};
 
 use crate::core::ecs::entities::game_object::GameObject;
+use crate::core::gpu::scene_render::RecordableScene;
 use crate::{
     core::{
-        ecs::{
-            components::{Material3D, Structure3D},
-            types::Id,
-        },
+        ecs::components::{Material3D, Structure3D},
         gpu::{
-            materials_manager::MaterialsManager,
-            scene_render::{SceneRender, SceneRenderRecordable},
-            texture::ImageTexture,
+            materials_manager::MaterialsManager, scene_render::SceneRender, texture::ImageTexture,
         },
         scene::Scene,
         utils::get_random_id,
     },
+    shared::types::Id,
     vulkan_backend::{
-        backend::VBackend, descriptor::VDescriptorWriteBatch, rendering::info::VRenderInfo,
+        backend::VBackend, descriptor::VDescriptorWriteBatch, frame::context::VFrameRenderContext,
     },
     window::{Window, WindowConfig},
 };
@@ -64,7 +61,7 @@ impl GameEngine {
         self.textures.insert(default_texture_id, default_texture);
         let default_material_index = self.materials_manager.allocate_material(
             &self.v_backend.v_device,
-            &self.scene_render.descriptor_set_layouts[2],
+            &self.scene_render.get_image_sampler_layout(),
         );
         let default_material = Material3D {
             manager_index: default_material_index,
@@ -107,15 +104,15 @@ impl GameEngine {
             .get(entity.get_id())
             .unwrap();
 
-        self.scene_render.v_shadow_rendering_system.add_framebuffer(
-            &self.v_backend.v_device,
-            *entity.get_id(),
-            None,
-            Some(shadow_map_view),
-            shadow_map.config.get_extent_2d(),
-            true,
-            true,
-        );
+        // self.scene_render.v_shadow_rendering_system.add_framebuffer(
+        //     &self.v_backend.v_device,
+        //     *entity.get_id(),
+        //     None,
+        //     Some(shadow_map_view),
+        //     shadow_map.config.get_extent_2d(),
+        //     true,
+        //     true,
+        // );
     }
 
     pub fn disable_shadow_for_spot_light_3d(&mut self, entity: &GameObject) {
@@ -123,9 +120,9 @@ impl GameEngine {
         scene
             .shadow_mapping
             .remove_spot_light(&self.v_backend, entity.get_id());
-        self.scene_render
-            .v_shadow_rendering_system
-            .remove_framebuffer(&self.v_backend.v_device, entity.get_id());
+        // self.scene_render
+        //     .v_shadow_rendering_system
+        //     .remove_framebuffer(&self.v_backend.v_device, entity.get_id());
     }
 
     pub fn get_structure_3d_from_obj(&self, obj_path: &str) -> Structure3D {
@@ -146,7 +143,7 @@ impl GameEngine {
             .expect("invalid texture id passed to get_material_3d_from_texture");
         let allocated_sets_index = self.materials_manager.allocate_material(
             &self.v_backend.v_device,
-            &self.scene_render.descriptor_set_layouts[2],
+            &self.scene_render.get_image_sampler_layout(),
         );
 
         let mut batch_writer = VDescriptorWriteBatch::new();
@@ -224,13 +221,13 @@ impl GameEngine {
         }
     }
 
-    fn render_scene(&self, info: &VRenderInfo) {
+    fn render_scene(&self, ctx: &VFrameRenderContext) {
         if let Some(scene) = &self.active_scene {
-            let recordables: [&dyn SceneRenderRecordable; 1] = [scene];
+            let recordables: [&dyn RecordableScene; 1] = [scene];
             self.scene_render.render(
                 &self.v_backend.v_device,
                 &self.materials_manager,
-                info,
+                ctx,
                 &recordables,
             );
         }

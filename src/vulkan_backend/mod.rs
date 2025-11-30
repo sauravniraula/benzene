@@ -5,7 +5,7 @@ pub mod device;
 pub mod instance;
 pub mod memory;
 pub mod pipeline;
-pub mod rendering;
+pub mod frame;
 pub mod surface;
 pub mod swapchain;
 pub mod vertex_input;

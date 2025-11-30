@@ -1,4 +1,4 @@
-use crate::core::ecs::types::Id;
+use crate::shared::types::Id;
 
 #[derive(Clone)]
 pub struct GameObject {

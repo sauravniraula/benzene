@@ -1,3 +1,4 @@
+use crate::shared::types::Id;
 use crate::vulkan_backend::device::VDevice;
 use crate::vulkan_backend::memory::VMemoryManager;
 use crate::vulkan_backend::memory::image::config::VImageConfig;
@@ -7,7 +8,6 @@ use crate::{
     window::Window,
 };
 use ash::{khr, vk};
-use crate::core::ecs::types::Id;
 use rand;
 
 pub struct VSwapchain {

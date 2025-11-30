@@ -3,9 +3,9 @@ use crate::{
     vulkan_backend::{
         backend_event::VBackendEvent,
         device::{VDevice, VPhysicalDevice, config::VPhysicalDeviceConfig},
+        frame::{VFrameRenderResult, VFrameRenderer, context::VFrameRenderContext},
         instance::{VInstance, VInstanceConfig},
         memory::VMemoryManager,
-        rendering::{VRenderResult, VRenderer, info::VRenderInfo},
         surface::VSurface,
         swapchain::VSwapchain,
     },
@@ -19,7 +19,7 @@ pub struct VBackend {
     pub v_device: VDevice,
     pub v_memory_manager: VMemoryManager,
     pub v_swapchain: VSwapchain,
-    pub v_renderer: VRenderer,
+    pub v_frame_renderer: VFrameRenderer,
 }
 
 impl VBackend {
@@ -48,7 +48,7 @@ impl VBackend {
             &v_device,
             &v_memory_manager,
         );
-        let v_renderer = VRenderer::new(&v_device, MAX_FRAMES_IN_FLIGHT);
+        let v_frame_renderer = VFrameRenderer::new(&v_device, MAX_FRAMES_IN_FLIGHT);
 
         Self {
             v_instance,
@@ -57,7 +57,7 @@ impl VBackend {
             v_device,
             v_memory_manager,
             v_swapchain,
-            v_renderer,
+            v_frame_renderer,
         }
     }
 
@@ -78,10 +78,10 @@ impl VBackend {
     pub fn check_render_issues<'a>(
         &'a mut self,
         window: &Window,
-        result: VRenderResult,
+        result: VFrameRenderResult,
     ) -> Option<VBackendEvent<'a>> {
         match result {
-            VRenderResult::RecreateSwapchain => {
+            VFrameRenderResult::RecreateSwapchain => {
                 self.recreate_swapchain(window);
                 Some(VBackendEvent::UpdateFramebuffers(
                     &self.v_device,
@@ -92,13 +92,13 @@ impl VBackend {
         }
     }
 
-    pub fn render(&self, render: impl Fn(VRenderInfo) -> ()) -> VRenderResult {
-        self.v_renderer
+    pub fn render(&self, render: impl Fn(VFrameRenderContext) -> ()) -> VFrameRenderResult {
+        self.v_frame_renderer
             .render(&self.v_device, &self.v_swapchain, render)
     }
 
     pub fn destroy(&self) {
-        self.v_renderer.destroy(&self.v_device);
+        self.v_frame_renderer.destroy(&self.v_device);
         self.v_swapchain
             .destroy(&self.v_device, &self.v_memory_manager);
         self.v_memory_manager.destroy(&self.v_device);

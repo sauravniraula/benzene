@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ash::vk;
 
 use crate::{
-    core::ecs::types::Id,
+    shared::types::Id,
     vulkan_backend::{
         backend::VBackend,
         memory::image::{VImage, VImageConfig, image_view::VImageView, sampler::VSampler},

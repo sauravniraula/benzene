@@ -1,28 +1,25 @@
-use std::{
-    cell::Cell,
-    u64,
-};
+use std::{cell::Cell, u64};
 
 use ash::vk;
 
 use crate::vulkan_backend::{
     device::VDevice,
-    rendering::{VRenderResult, info::VRenderInfo},
+    frame::{VFrameRenderResult, context::VFrameRenderContext},
     swapchain::VSwapchain,
 };
 
-pub struct VRenderer {
+pub struct VFrameRenderer {
     pub command_pool: vk::CommandPool,
     pub command_buffers: Vec<vk::CommandBuffer>,
     pub ready_to_submit_semaphores: Vec<vk::Semaphore>,
     pub ready_to_present_semaphores: Vec<vk::Semaphore>,
     pub buffer_free_fences: Vec<vk::Fence>,
-    pub max_frames: usize,
+    pub total_frames: usize,
     pub frame_index: Cell<usize>,
 }
 
-impl VRenderer {
-    pub fn new(v_device: &VDevice, max_frames: usize) -> Self {
+impl VFrameRenderer {
+    pub fn new(v_device: &VDevice, total_frames: usize) -> Self {
         let command_pool = unsafe {
             v_device
                 .device
@@ -41,13 +38,13 @@ impl VRenderer {
                 .allocate_command_buffers(
                     &vk::CommandBufferAllocateInfo::default()
                         .command_pool(command_pool)
-                        .command_buffer_count(max_frames as u32),
+                        .command_buffer_count(total_frames as u32),
                 )
                 .expect("failed to allocate command buffers")
         };
 
         let ready_to_submit_semaphores = unsafe {
-            (0..max_frames)
+            (0..total_frames)
                 .map(|_| {
                     v_device
                         .device
@@ -57,7 +54,7 @@ impl VRenderer {
                 .collect()
         };
         let ready_to_present_semaphores = unsafe {
-            (0..max_frames)
+            (0..total_frames)
                 .map(|_| {
                     v_device
                         .device
@@ -68,7 +65,7 @@ impl VRenderer {
         };
 
         let buffer_free_fences = unsafe {
-            (0..max_frames)
+            (0..total_frames)
                 .map(|_| {
                     v_device
                         .device
@@ -87,7 +84,7 @@ impl VRenderer {
             ready_to_submit_semaphores,
             ready_to_present_semaphores,
             buffer_free_fences,
-            max_frames,
+            total_frames,
             frame_index: Cell::new(0),
         }
     }
@@ -96,41 +93,36 @@ impl VRenderer {
         &self,
         v_device: &VDevice,
         v_swapchain: &VSwapchain,
-        render: impl Fn(VRenderInfo) -> (),
-    ) -> VRenderResult {
+        render: impl Fn(VFrameRenderContext) -> (),
+    ) -> VFrameRenderResult {
         let frame_index = self.frame_index.get();
 
-        match self.start_draw(v_device, v_swapchain, frame_index) {
-            Ok((command_buffer, image_index)) => {
-                render(VRenderInfo {
-                    command_buffer,
+        match self.start_frame(v_device, v_swapchain, frame_index) {
+            Ok((cmd, image_index)) => {
+                render(VFrameRenderContext {
+                    index: frame_index,
+                    cmd,
                     image_id: v_swapchain.image_ids[image_index],
-                    frame_index,
                 });
 
-                let end_draw_result = self.end_draw(
-                    v_device,
-                    v_swapchain,
-                    command_buffer,
-                    image_index,
-                    frame_index,
-                );
-                if let VRenderResult::Ok = end_draw_result {
+                let end_result =
+                    self.end_frame(v_device, v_swapchain, cmd, image_index, frame_index);
+                if let VFrameRenderResult::Ok = end_result {
                     self.frame_index
-                        .replace((frame_index + 1) % self.max_frames);
+                        .replace((frame_index + 1) % self.total_frames);
                 }
-                end_draw_result
+                end_result
             }
             Err(err) => err,
         }
     }
 
-    pub fn start_draw(
+    pub fn start_frame(
         &self,
         v_device: &VDevice,
         v_swapchain: &VSwapchain,
         frame_index: usize,
-    ) -> Result<(vk::CommandBuffer, usize), VRenderResult> {
+    ) -> Result<(vk::CommandBuffer, usize), VFrameRenderResult> {
         unsafe {
             v_device
                 .device
@@ -154,7 +146,7 @@ impl VRenderer {
         match image_acquire_result {
             Ok((image_index, is_suboptimal)) => {
                 if is_suboptimal {
-                    return Err(VRenderResult::RecreateSwapchain);
+                    return Err(VFrameRenderResult::RecreateSwapchain);
                 }
                 unsafe {
                     v_device
@@ -172,18 +164,18 @@ impl VRenderer {
                 };
                 Ok((self.command_buffers[frame_index], image_index as usize))
             }
-            _ => return Err(VRenderResult::RecreateSwapchain),
+            _ => return Err(VFrameRenderResult::RecreateSwapchain),
         }
     }
 
-    pub fn end_draw(
+    pub fn end_frame(
         &self,
         v_device: &VDevice,
         v_swapchain: &VSwapchain,
         command_buffer: vk::CommandBuffer,
         image_index: usize,
         frame_index: usize,
-    ) -> VRenderResult {
+    ) -> VFrameRenderResult {
         unsafe {
             v_device
                 .device
@@ -219,11 +211,11 @@ impl VRenderer {
             return match queue_present_result {
                 Ok(is_suboptimal) => {
                     if is_suboptimal {
-                        return VRenderResult::RecreateSwapchain;
+                        return VFrameRenderResult::RecreateSwapchain;
                     }
-                    return VRenderResult::Ok;
+                    return VFrameRenderResult::Ok;
                 }
-                Err(_) => VRenderResult::RecreateSwapchain,
+                Err(_) => VFrameRenderResult::RecreateSwapchain,
             };
         };
     }

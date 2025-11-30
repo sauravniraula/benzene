@@ -1,4 +1,4 @@
-pub enum VRenderResult {
+pub enum VFrameRenderResult {
     Ok,
     RecreateSwapchain,
 }

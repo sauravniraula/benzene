@@ -10,29 +10,28 @@ use crate::{
                 camera_3d_compute_transform, camera_3d_handle_window_event,
                 update_transform_3d_matrix,
             },
-            types::Id,
         },
         gpu::{
             directional_light_uniform::DirectionalLightUniform,
             global_uniform::GlobalUniform,
             materials_manager::MaterialsManager,
             point_light_uniform::PointLightUniform,
-            scene_render::{SceneRender, SceneRenderDrawable, SceneRenderRecordable},
+            scene_render::{DrawableSceneElement, RecordableScene, SceneRender},
             shadow_mapping::ShadowMapping,
             spot_light_uniform::SpotLightUniform,
             texture::ImageTexture,
         },
         model_push_constant::ModelPushConstant,
     },
+    shared::types::Id,
     vulkan_backend::{
         backend::VBackend,
         backend_event::VBackendEvent,
         descriptor::{
-            VDescriptorPool, VDescriptorSet, VDescriptorSetLayout, VDescriptorWriteBatch,
+            VDescriptorPool, VDescriptorSet, VDescriptorWriteBatch,
             config::{VDescriptorPoolConfig, VDescriptorPoolTypeConfig},
         },
         device::VDevice,
-        pipeline::VPipelineInfo,
     },
 };
 use ash::vk;
@@ -104,12 +103,12 @@ impl Scene {
         let global_uniform_set = VDescriptorSet::new(
             &v_backend.v_device,
             &default_descriptor_pool,
-            &scene_render.descriptor_set_layouts[0],
+            &scene_render.get_global_uniform_layout(),
         );
         let lights_set = VDescriptorSet::new(
             &v_backend.v_device,
             &default_descriptor_pool,
-            &scene_render.descriptor_set_layouts[1],
+            &scene_render.get_lights_uniform_layout(),
         );
 
         // Attaching to descriptor sets
@@ -378,21 +377,19 @@ impl Scene {
     }
 }
 
-impl SceneRenderRecordable for Scene {
+impl RecordableScene for Scene {
     fn record_geometry(
         &self,
         v_device: &VDevice,
         materials_manager: &MaterialsManager,
         cmd: vk::CommandBuffer,
-        _frame_index: usize,
-        pipeline_infos: &Vec<VPipelineInfo>,
-        _descriptor_sets_layouts: &Vec<VDescriptorSetLayout>,
+        gemetry_lighting_p_layout: &vk::PipelineLayout,
     ) {
         unsafe {
             v_device.device.cmd_bind_descriptor_sets(
                 cmd,
                 vk::PipelineBindPoint::GRAPHICS,
-                pipeline_infos[0].layout,
+                *gemetry_lighting_p_layout,
                 0,
                 &[self.global_uniform_set.set, self.lights_set.set],
                 &[],
@@ -410,7 +407,7 @@ impl SceneRenderRecordable for Scene {
                     v_device.device.cmd_bind_descriptor_sets(
                         cmd,
                         vk::PipelineBindPoint::GRAPHICS,
-                        pipeline_infos[0].layout,
+                        *gemetry_lighting_p_layout,
                         2,
                         &[materials_manager.get_set_at(material_3d_index).set],
                         &[],
@@ -429,7 +426,7 @@ impl SceneRenderRecordable for Scene {
                 unsafe {
                     v_device.device.cmd_push_constants(
                         cmd,
-                        pipeline_infos[0].layout,
+                        *gemetry_lighting_p_layout,
                         vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                         0,
                         data,

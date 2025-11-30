@@ -1,208 +1,88 @@
 use ash::vk::{self};
 
 use crate::{
-    core::{gpu::materials_manager::MaterialsManager, model_push_constant::ModelPushConstant},
-    vulkan_backend::{
-        backend::VBackend,
-        backend_event::VBackendEvent,
-        descriptor::{
-            VDescriptorSetLayout,
-            config::{VDescriptorBindingConfig, VDescriptorLayoutConfig},
+    core::gpu::{
+        materials_manager::MaterialsManager,
+        render_stage::geometry_and_lighting::{
+            GeometryLightingRenderStage, GeometryLightingRenderStageConfig,
         },
-        device::VDevice,
-        pipeline::{VPipelineInfo, VPipelineInfoConfig},
-        push_constant::VPushConstant,
-        rendering::{VRenderingSystem, VRenderingSystemConfig, info::VRenderInfo},
-        vertex_input::{BindableVertexInput, Vertex3D},
+    },
+    vulkan_backend::{
+        backend::VBackend, backend_event::VBackendEvent, descriptor::VDescriptorSetLayout,
+        device::VDevice, frame::context::VFrameRenderContext, swapchain::VSwapchain,
     },
 };
-pub trait SceneRenderRecordable {
+pub trait RecordableScene {
     fn record_geometry(
         &self,
         v_device: &VDevice,
         materials_manager: &MaterialsManager,
         cmd: vk::CommandBuffer,
-        frame_index: usize,
-        pipeline_infos: &Vec<VPipelineInfo>,
-        descriptor_sets_layouts: &Vec<VDescriptorSetLayout>,
+        geometry_lighting_p_layout: &vk::PipelineLayout,
     );
 }
 
-pub trait SceneRenderDrawable {
-    fn draw(&self, v_device: &VDevice, command_buffer: vk::CommandBuffer);
+pub trait DrawableSceneElement {
+    fn draw(&self, v_device: &VDevice, cmd: vk::CommandBuffer);
 }
 
 pub struct SceneRender {
-    pub v_rendering_system: VRenderingSystem,
-    pipeline_infos: Vec<VPipelineInfo>,
-
+    pub geometry_lighting_render_stage: GeometryLightingRenderStage,
     // shadow
-    pub v_shadow_rendering_system: VRenderingSystem,
-    shadow_pipeline_infos: Vec<VPipelineInfo>,
-
-    pub descriptor_set_layouts: Vec<VDescriptorSetLayout>,
+    // pub v_shadow_rendering_system: VRenderingSystem,
+    // shadow_pipeline_infos: Vec<VPipelineInfo>,
 }
 
 impl SceneRender {
     pub fn new(v_backend: &VBackend) -> Self {
-        let vertex_binding_descriptions = Vertex3D::get_binding_descriptions();
-        let vertex_attribute_descriptions = Vertex3D::get_attribute_descriptions();
-
-        let model_push_constant = VPushConstant::new::<ModelPushConstant>(
-            vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-        );
-
-        // Creating Descriptor Layouts
-        let global_uniform_layout = VDescriptorSetLayout::new(
+        let geometry_lighting_render_stage = GeometryLightingRenderStage::new(
             &v_backend.v_device,
-            VDescriptorLayoutConfig {
-                bindings: vec![VDescriptorBindingConfig {
-                    binding: 0,
-                    count: 1,
-                    descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                    shader_stage: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-                }],
-            },
-        );
-        let lights_uniform_layout = VDescriptorSetLayout::new(
-            &v_backend.v_device,
-            VDescriptorLayoutConfig {
-                bindings: vec![
-                    VDescriptorBindingConfig {
-                        binding: 0,
-                        count: 1,
-                        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                        shader_stage: vk::ShaderStageFlags::FRAGMENT,
-                    },
-                    VDescriptorBindingConfig {
-                        binding: 1,
-                        count: 1,
-                        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                        shader_stage: vk::ShaderStageFlags::FRAGMENT,
-                    },
-                    VDescriptorBindingConfig {
-                        binding: 2,
-                        count: 1,
-                        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                        shader_stage: vk::ShaderStageFlags::FRAGMENT,
-                    },
-                ],
-            },
-        );
-        let image_sampler_layout = VDescriptorSetLayout::new(
-            &v_backend.v_device,
-            VDescriptorLayoutConfig {
-                bindings: vec![VDescriptorBindingConfig {
-                    binding: 0,
-                    count: 1,
-                    descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                    shader_stage: vk::ShaderStageFlags::FRAGMENT,
-                }],
+            GeometryLightingRenderStageConfig {
+                color_format: v_backend.v_swapchain.v_images[0].config.format,
+                depth_format: v_backend.v_swapchain.depth_format,
             },
         );
 
-        let pipeline_infos = vec![VPipelineInfo::new(
-            &v_backend.v_device,
-            VPipelineInfoConfig {
-                binding_descriptions: vertex_binding_descriptions.clone(),
-                attribute_descriptions: vertex_attribute_descriptions.clone(),
-                vertex_shader_file: Some("assets/shaders/shader.vert".into()),
-                fragment_shader_file: Some("assets/shaders/shader.frag".into()),
-            },
-            Some(&model_push_constant),
-            &[
-                &global_uniform_layout,
-                &lights_uniform_layout,
-                &image_sampler_layout,
-            ],
-        )];
+        let mut scene_renderer = Self {
+            geometry_lighting_render_stage,
+        };
 
-        let color_views = &v_backend.v_swapchain.v_image_views;
-        let depth_view = &v_backend.v_swapchain.depth_v_image_view;
+        scene_renderer
+            .init_geometry_lighting_render_stage(&v_backend.v_device, &v_backend.v_swapchain);
 
-        let mut v_rendering_system = VRenderingSystem::new(
-            &v_backend.v_device,
-            VRenderingSystemConfig {
-                pipeline_infos: &pipeline_infos,
-                color_format: Some(v_backend.v_swapchain.v_images[0].config.format),
-                depth_format: Some(v_backend.v_swapchain.depth_format),
-                color_final_layout: Some(vk::ImageLayout::PRESENT_SRC_KHR),
-                depth_final_layout: Some(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
-                dynamic_viewport: true,
-            },
+        scene_renderer
+    }
+
+    pub fn init_geometry_lighting_render_stage(
+        &mut self,
+        v_device: &VDevice,
+        v_swapchain: &VSwapchain,
+    ) {
+        self.geometry_lighting_render_stage.init_framebuffers(
+            v_device,
+            &v_swapchain.image_ids,
+            &v_swapchain.v_image_views,
+            &v_swapchain.depth_v_image_view,
+            v_swapchain.image_extent,
         );
-        for (i, id) in v_backend.v_swapchain.image_ids.iter().copied().enumerate() {
-            v_rendering_system.add_framebuffer(
-                &v_backend.v_device,
-                id,
-                Some(&color_views[i]),
-                Some(depth_view),
-                v_backend.v_swapchain.image_extent,
-                i == 0,
-                i == 0,
-            );
-        }
+    }
 
-        let shadow_pipeline_infos = vec![VPipelineInfo::new(
-            &v_backend.v_device,
-            VPipelineInfoConfig {
-                binding_descriptions: vertex_binding_descriptions,
-                attribute_descriptions: vertex_attribute_descriptions,
-                vertex_shader_file: Some("assets/shaders/shadow.vert".into()),
-                fragment_shader_file: None,
-            },
-            Some(&model_push_constant),
-            &[&global_uniform_layout],
-        )];
+    pub fn get_global_uniform_layout(&self) -> &VDescriptorSetLayout {
+        &self.geometry_lighting_render_stage.descriptor_set_layouts[0]
+    }
 
-        let v_shadow_rendering_system = VRenderingSystem::new(
-            &v_backend.v_device,
-            VRenderingSystemConfig {
-                pipeline_infos: &shadow_pipeline_infos,
-                color_format: None,
-                depth_format: Some(
-                    v_backend
-                        .v_physical_device
-                        .get_format_for_depth_stencil(&v_backend.v_instance),
-                ),
-                color_final_layout: None,
-                depth_final_layout: Some(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
-                dynamic_viewport: true,
-            },
-        );
+    pub fn get_lights_uniform_layout(&self) -> &VDescriptorSetLayout {
+        &self.geometry_lighting_render_stage.descriptor_set_layouts[1]
+    }
 
-        Self {
-            v_rendering_system,
-            pipeline_infos,
-            v_shadow_rendering_system,
-            shadow_pipeline_infos,
-            descriptor_set_layouts: vec![
-                global_uniform_layout,
-                lights_uniform_layout,
-                image_sampler_layout,
-            ],
-        }
+    pub fn get_image_sampler_layout(&self) -> &VDescriptorSetLayout {
+        &self.geometry_lighting_render_stage.descriptor_set_layouts[2]
     }
 
     pub fn handle_backend_event(&mut self, event: &VBackendEvent) {
         match event {
             VBackendEvent::UpdateFramebuffers(v_device, v_swapchain) => {
-                self.v_rendering_system.remove_all_framebuffers(v_device);
-
-                let color_views = &v_swapchain.v_image_views;
-                let depth_view = &v_swapchain.depth_v_image_view;
-
-                for (i, id) in v_swapchain.image_ids.iter().copied().enumerate() {
-                    self.v_rendering_system.add_framebuffer(
-                        v_device,
-                        id,
-                        Some(&color_views[i]),
-                        Some(depth_view),
-                        v_swapchain.image_extent,
-                        i == 0,
-                        i == 0,
-                    );
-                }
+                self.init_geometry_lighting_render_stage(v_device, v_swapchain);
             }
             _ => {}
         }
@@ -212,26 +92,18 @@ impl SceneRender {
         &self,
         v_device: &VDevice,
         materials_manager: &MaterialsManager,
-        info: &VRenderInfo,
-        recordables: &[&dyn SceneRenderRecordable],
+        ctx: &VFrameRenderContext,
+        recordables: &[&dyn RecordableScene],
     ) {
-        // Shadow Pass
-        if !self.v_shadow_rendering_system.framebuffers.is_empty() {
-            self.v_shadow_rendering_system
-                .start(v_device, info.command_buffer, &info.image_id);
-
-            self.v_shadow_rendering_system.end(v_device, info);
-        }
-
         // Geometry Pass
-        self.v_rendering_system
-            .start(v_device, info.command_buffer, &info.image_id);
+        self.geometry_lighting_render_stage
+            .start(v_device, ctx.cmd, &ctx.image_id);
 
         unsafe {
             v_device.device.cmd_bind_pipeline(
-                info.command_buffer,
+                ctx.cmd,
                 vk::PipelineBindPoint::GRAPHICS,
-                self.v_rendering_system.pipelines[0],
+                self.geometry_lighting_render_stage.pipelines[0],
             )
         };
 
@@ -239,27 +111,16 @@ impl SceneRender {
             recordable.record_geometry(
                 v_device,
                 materials_manager,
-                info.command_buffer,
-                info.frame_index,
-                &self.pipeline_infos,
-                &self.descriptor_set_layouts,
+                ctx.cmd,
+                &self.geometry_lighting_render_stage.pipeline_infos[0].layout,
             );
         }
 
-        self.v_rendering_system.end(v_device, info);
+        self.geometry_lighting_render_stage.end(v_device, ctx);
     }
 
     pub fn destroy(&self, v_device: &VDevice) {
-        for each in self.shadow_pipeline_infos.iter() {
-            each.destroy(v_device);
-        }
-        for each in self.pipeline_infos.iter() {
-            each.destroy(v_device);
-        }
-        for each in self.descriptor_set_layouts.iter() {
-            each.destroy(v_device);
-        }
-        self.v_shadow_rendering_system.destroy(v_device);
-        self.v_rendering_system.destroy(v_device);
+        // self.v_shadow_rendering_system.destroy(v_device);
+        self.geometry_lighting_render_stage.destroy(v_device);
     }
 }
