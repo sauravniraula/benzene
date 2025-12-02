@@ -13,12 +13,12 @@ use crate::{
     },
 };
 pub trait RecordableScene {
-    fn record_geometry(
+    fn record_scene(
         &self,
         v_device: &VDevice,
-        materials_manager: &MaterialsManager,
         cmd: vk::CommandBuffer,
-        geometry_lighting_p_layout: &vk::PipelineLayout,
+        materials_m: &MaterialsManager,
+        scene_r: &SceneRenderer,
     );
 }
 
@@ -26,14 +26,14 @@ pub trait DrawableSceneElement {
     fn draw(&self, v_device: &VDevice, cmd: vk::CommandBuffer);
 }
 
-pub struct SceneRender {
+pub struct SceneRenderer {
     pub geometry_lighting_render_stage: GeometryLightingRenderStage,
     // shadow
     // pub v_shadow_rendering_system: VRenderingSystem,
     // shadow_pipeline_infos: Vec<VPipelineInfo>,
 }
 
-impl SceneRender {
+impl SceneRenderer {
     pub fn new(v_backend: &VBackend) -> Self {
         let geometry_lighting_render_stage = GeometryLightingRenderStage::new(
             &v_backend.v_device,
@@ -65,6 +65,10 @@ impl SceneRender {
             &v_swapchain.depth_v_image_view,
             v_swapchain.image_extent,
         );
+    }
+
+    pub fn get_pipeline_layout(&self) -> &vk::PipelineLayout {
+        &self.geometry_lighting_render_stage.pipeline_infos[0].layout
     }
 
     pub fn get_global_uniform_layout(&self) -> &VDescriptorSetLayout {
@@ -108,12 +112,7 @@ impl SceneRender {
         };
 
         for recordable in recordables.iter() {
-            recordable.record_geometry(
-                v_device,
-                materials_manager,
-                ctx.cmd,
-                &self.geometry_lighting_render_stage.pipeline_infos[0].layout,
-            );
+            recordable.record_scene(v_device, ctx.cmd, materials_manager, self);
         }
 
         self.geometry_lighting_render_stage.end(v_device, ctx);

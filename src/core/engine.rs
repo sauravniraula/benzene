@@ -5,11 +5,12 @@ use std::{collections::HashMap, time::Duration};
 
 use crate::core::ecs::entities::game_object::GameObject;
 use crate::core::gpu::scene_render::RecordableScene;
+use crate::vulkan_backend::backend_event::VBackendEvent;
 use crate::{
     core::{
         ecs::components::{Material3D, Structure3D},
         gpu::{
-            materials_manager::MaterialsManager, scene_render::SceneRender, texture::ImageTexture,
+            materials_manager::MaterialsManager, scene_render::SceneRenderer, texture::ImageTexture,
         },
         scene::Scene,
         utils::get_random_id,
@@ -25,7 +26,7 @@ pub struct GameEngine {
     // Core
     window: Window,
     v_backend: VBackend,
-    scene_render: SceneRender,
+    scene_renderer: SceneRenderer,
     materials_manager: MaterialsManager,
 
     // Resources
@@ -34,23 +35,29 @@ pub struct GameEngine {
     // State
     active_scene: Option<Scene>,
     last_frame_instant: Instant,
+
+    // Debug
+    frame_count: usize,
+    fps: usize,
 }
 
 impl GameEngine {
     pub fn new() -> Self {
         let window = Window::new(WindowConfig::default());
         let v_backend = VBackend::new(&window);
-        let scene_render = SceneRender::new(&v_backend);
+        let scene_renderer = SceneRenderer::new(&v_backend);
         let materials_manager = MaterialsManager::new(&v_backend.v_device);
 
         let engine = Self {
             window,
             v_backend,
-            scene_render,
+            scene_renderer,
             materials_manager,
             textures: HashMap::new(),
             active_scene: None,
             last_frame_instant: Instant::now(),
+            frame_count: 0,
+            fps: 0,
         };
         engine
     }
@@ -61,7 +68,7 @@ impl GameEngine {
         self.textures.insert(default_texture_id, default_texture);
         let default_material_index = self.materials_manager.allocate_material(
             &self.v_backend.v_device,
-            &self.scene_render.get_image_sampler_layout(),
+            &self.scene_renderer.get_image_sampler_layout(),
         );
         let default_material = Material3D {
             manager_index: default_material_index,
@@ -76,7 +83,7 @@ impl GameEngine {
     }
 
     pub fn create_scene(&self) -> Scene {
-        Scene::new(&self.v_backend, &self.scene_render)
+        Scene::new(&self.v_backend, &self.scene_renderer)
     }
 
     pub fn get_active_scene(&mut self) -> &mut Scene {
@@ -143,7 +150,7 @@ impl GameEngine {
             .expect("invalid texture id passed to get_material_3d_from_texture");
         let allocated_sets_index = self.materials_manager.allocate_material(
             &self.v_backend.v_device,
-            &self.scene_render.get_image_sampler_layout(),
+            &self.scene_renderer.get_image_sampler_layout(),
         );
 
         let mut batch_writer = VDescriptorWriteBatch::new();
@@ -197,6 +204,11 @@ impl GameEngine {
         let dt = current_instant.duration_since(self.last_frame_instant);
         self.last_frame_instant = current_instant;
 
+        // Frame Count and FPS
+        self.fps = (1.0 / dt.as_secs_f64()) as usize;
+        self.frame_count += 1;
+        // println!("FPS: {}", self.fps);
+
         on_pre_render(self, dt);
 
         // Pre-render the scene
@@ -214,9 +226,17 @@ impl GameEngine {
             .v_backend
             .check_render_issues(&self.window, render_result)
         {
-            self.scene_render.handle_backend_event(&event);
+            self.scene_renderer.handle_backend_event(&event);
             if let Some(scene) = &mut self.active_scene {
                 scene.handle_backend_event(&event);
+            }
+
+            //* Debug */
+            match event {
+                VBackendEvent::UpdateFramebuffers(..) => {
+                    println!("Update framebuffer, frame: {}", self.frame_count);
+                }
+                _ => (),
             }
         }
     }
@@ -224,7 +244,7 @@ impl GameEngine {
     fn render_scene(&self, ctx: &VFrameRenderContext) {
         if let Some(scene) = &self.active_scene {
             let recordables: [&dyn RecordableScene; 1] = [scene];
-            self.scene_render.render(
+            self.scene_renderer.render(
                 &self.v_backend.v_device,
                 &self.materials_manager,
                 ctx,
@@ -242,7 +262,7 @@ impl GameEngine {
         for (_, tex) in self.textures.drain() {
             tex.destroy(&self.v_backend);
         }
-        self.scene_render.destroy(&self.v_backend.v_device);
+        self.scene_renderer.destroy(&self.v_backend.v_device);
         self.materials_manager.destroy(&self.v_backend.v_device);
         self.v_backend.destroy();
     }

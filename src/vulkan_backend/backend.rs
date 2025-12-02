@@ -73,6 +73,12 @@ impl VBackend {
             &self.v_device,
             &self.v_memory_manager,
         );
+
+        //* Debug */
+        println!(
+            "Recreated Swapchain, width: {}, height: {}",
+            self.v_swapchain.image_extent.width, self.v_swapchain.image_extent.height
+        );
     }
 
     pub fn check_render_issues<'a>(

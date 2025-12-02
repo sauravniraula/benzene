@@ -170,10 +170,12 @@ impl VSwapchain {
             surface_capabilities.min_image_extent.height,
             surface_capabilities.max_image_extent.height,
         );
-        vk::Extent2D {
+        let extent = vk::Extent2D {
             width: width,
             height: height,
-        }
+        };
+
+        extent
     }
 
     pub fn select_swapchain_image_count(surface_capabilities: &vk::SurfaceCapabilitiesKHR) -> u32 {

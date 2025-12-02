@@ -2,7 +2,7 @@ use benzene::core::{
     GameEngine,
     ecs::{
         components::{
-            Camera3D, Structure3D, Transform3D, directional_light_3d::DirectionalLight3D,
+            Camera3D, Structure3D, Transform3D,
             spot_light_3d::SpotLight3D,
         },
         entities::game_object::GameObject,

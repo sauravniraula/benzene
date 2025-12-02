@@ -109,11 +109,12 @@ impl Model {
 impl DrawableSceneElement for Model {
     fn draw(&self, v_device: &VDevice, cmd: vk::CommandBuffer) {
         unsafe {
-            let vertex_buffers = [self.v_buffer.buffer];
-            let offsets = [0u64];
-            v_device
-                .device
-                .cmd_bind_vertex_buffers(cmd, 0, &vertex_buffers, &offsets);
+            v_device.device.cmd_bind_vertex_buffers(
+                cmd,
+                0,
+                std::slice::from_ref(&self.v_buffer.buffer),
+                &[0u64],
+            );
             v_device.device.cmd_bind_index_buffer(
                 cmd,
                 self.i_buffer.buffer,
