@@ -1,10 +1,7 @@
 use benzene::core::{
     GameEngine,
     ecs::{
-        components::{
-            Camera3D, Structure3D, Transform3D,
-            spot_light_3d::SpotLight3D,
-        },
+        components::{Camera3D, Structure3D, Transform3D, spot_light_3d::SpotLight3D},
         entities::game_object::GameObject,
     },
 };
@@ -12,7 +9,6 @@ use nalgebra::{Vector3, Vector4};
 
 fn main() {
     let mut game_engine = GameEngine::new();
-    game_engine.init();
 
     let mut scene = game_engine.create_scene();
 
@@ -109,14 +105,13 @@ fn main() {
 
     game_engine.set_active_scene(scene);
 
-    game_engine.run(&mut |engine, dt| {
-        // let scene = engine.get_active_scene();
-        // let sun_transform_3d = scene.get_transform_3d_component(&sun);
-        // rotate_transform_3d(
-        //     sun_transform_3d,
-        //     Vector3::new(0.0, 0.0, 1.0 * dt.as_secs_f32()),
-        // );
-        // scene.mark_directional_light_3d_dirty();
-    });
+    // let scene = game_engine.get_active_scene();
+    // let sun_transform_3d = scene.get_transform_3d_component(&sun);
+    // rotate_transform_3d(
+    //     sun_transform_3d,
+    //     Vector3::new(0.0, 0.0, 1.0 * dt.as_secs_f32()),
+    // );
+    // scene.mark_directional_light_3d_dirty();
+
     game_engine.destroy();
 }

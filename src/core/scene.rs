@@ -35,7 +35,6 @@ use crate::{
     },
 };
 use ash::vk;
-use glfw::WindowEvent;
 use nalgebra::Vector4;
 use std::collections::HashMap;
 use std::mem::size_of;
@@ -160,13 +159,13 @@ impl Scene {
         scene
     }
 
-    pub fn handle_window_event(&mut self, event: &WindowEvent) {
-        if let Some(active_id) = self.active_camera {
-            if let Some(camera) = self.camera_3d_components.get_mut(&active_id) {
-                camera_3d_handle_window_event(camera, event);
-            }
-        }
-    }
+    // pub fn handle_window_event(&mut self, event: &WindowEvent) {
+    //     if let Some(active_id) = self.active_camera {
+    //         if let Some(camera) = self.camera_3d_components.get_mut(&active_id) {
+    //             camera_3d_handle_window_event(camera, event);
+    //         }
+    //     }
+    // }
 
     pub fn handle_backend_event(&mut self, event: &VBackendEvent) {
         match event {
@@ -271,17 +270,17 @@ impl Scene {
                 .camera_3d_components
                 .get_mut(&active_camera_id)
                 .expect("failed to get active camera from id");
-            if self.is_extent_dirty || camera_3d.active_keys.len() > 0 || camera_3d.transform.dirty
-            {
-                camera_3d_compute_transform(camera_3d, dt);
-                let (view, projection) = camera_3d
-                    .transform
-                    .get_transform_3d_view_projection(self.current_extent);
-                camera_3d.transform.dirty = false;
-                self.global_uniform.update_view(v_backend, 0, &view);
-                self.global_uniform
-                    .update_projection(v_backend, 0, &projection);
-            }
+            // if self.is_extent_dirty || camera_3d.active_keys.len() > 0 || camera_3d.transform.dirty
+            // {
+            //     camera_3d_compute_transform(camera_3d, dt);
+            //     let (view, projection) = camera_3d
+            //         .transform
+            //         .get_transform_3d_view_projection(self.current_extent);
+            //     camera_3d.transform.dirty = false;
+            //     self.global_uniform.update_view(v_backend, 0, &view);
+            //     self.global_uniform
+            //         .update_projection(v_backend, 0, &projection);
+            // }
         }
     }
 

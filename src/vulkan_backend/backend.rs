@@ -1,3 +1,5 @@
+use winit::window::Window;
+
 use crate::{
     constants::MAX_FRAMES_IN_FLIGHT,
     vulkan_backend::{
@@ -9,7 +11,6 @@ use crate::{
         surface::VSurface,
         swapchain::VSwapchain,
     },
-    window::Window,
 };
 
 pub struct VBackend {

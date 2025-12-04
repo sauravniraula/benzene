@@ -3,12 +3,10 @@ use crate::vulkan_backend::device::VDevice;
 use crate::vulkan_backend::memory::VMemoryManager;
 use crate::vulkan_backend::memory::image::config::VImageConfig;
 use crate::vulkan_backend::memory::image::{VImage, image_view::VImageView};
-use crate::{
-    vulkan_backend::{device::VPhysicalDevice, instance::VInstance, surface::VSurface},
-    window::Window,
-};
+use crate::vulkan_backend::{device::VPhysicalDevice, instance::VInstance, surface::VSurface};
 use ash::{khr, vk};
 use rand;
+use winit::window::Window;
 
 pub struct VSwapchain {
     pub swapchain_device: khr::swapchain::Device,
@@ -161,12 +159,12 @@ impl VSwapchain {
         window: &Window,
         surface_capabilities: &vk::SurfaceCapabilitiesKHR,
     ) -> vk::Extent2D {
-        let actual_extent = window.pwindow.get_framebuffer_size();
-        let width = (actual_extent.0 as u32).clamp(
+        let window_size = window.inner_size();
+        let width = (window_size.width as u32).clamp(
             surface_capabilities.min_image_extent.width,
             surface_capabilities.max_image_extent.width,
         );
-        let height = (actual_extent.1 as u32).clamp(
+        let height = (window_size.height as u32).clamp(
             surface_capabilities.min_image_extent.height,
             surface_capabilities.max_image_extent.height,
         );

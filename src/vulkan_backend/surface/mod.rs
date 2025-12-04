@@ -1,9 +1,11 @@
 use ash::khr;
 use ash::vk;
+use winit::raw_window_handle::HasDisplayHandle;
+use winit::raw_window_handle::HasWindowHandle;
+use winit::window::Window;
 
 use crate::vulkan_backend::device::VPhysicalDevice;
 use crate::vulkan_backend::instance::VInstance;
-use crate::window::Window;
 
 pub struct VSurface {
     pub surface: vk::SurfaceKHR,
@@ -12,9 +14,16 @@ pub struct VSurface {
 
 impl VSurface {
     pub fn new(window: &Window, v_instance: &VInstance) -> Self {
-        let surface = window
-            .get_surface(v_instance.instance.handle(), None)
-            .expect("failed to get surface");
+        let surface = unsafe {
+            ash_window::create_surface(
+                &v_instance.entry,
+                &v_instance.instance,
+                window.display_handle().unwrap().as_raw(),
+                window.window_handle().unwrap().as_raw(),
+                None,
+            )
+            .expect("failed to create surface")
+        };
 
         let surface_instance = khr::surface::Instance::new(&v_instance.entry, &v_instance.instance);
 

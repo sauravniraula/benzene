@@ -1,9 +1,8 @@
 use ash::ext::debug_utils;
 use ash::{Entry, Instance, vk};
 use std::ffi::CString;
-
-use crate::window::Window;
-
+use winit::raw_window_handle::HasDisplayHandle;
+use winit::window::Window;
 
 pub struct VInstance {
     pub entry: Entry,
@@ -24,18 +23,16 @@ impl VInstance {
             .engine_name(&app_name)
             .engine_version(0);
 
-        let mut extensions = window
-            .glfwi
-            .get_required_instance_extensions()
-            .expect("failed to fetch required glfw extensions");
-        extensions.extend(config.extensions);
+        let mut extensions =
+            ash_window::enumerate_required_extensions(window.display_handle().unwrap().as_raw())
+                .expect("failed to fetch required window extensions")
+                .to_vec();
+
+        extensions.extend(config.extensions.iter().map(|e| e.as_ptr() as *const i8));
+        let debug_utils_extension = c"VK_EXT_debug_utils";
         if config.enable_debug {
-            extensions.push("VK_EXT_debug_utils".into());
+            extensions.push(debug_utils_extension.as_ptr() as *const i8);
         }
-        let p_extenstions: Vec<*const i8> = extensions
-            .iter()
-            .map(|each| CString::new(each.as_str()).unwrap().into_raw() as *const i8)
-            .collect();
 
         let mut layers = config.layers;
         if config.enable_debug {
@@ -48,7 +45,7 @@ impl VInstance {
 
         let create_info = vk::InstanceCreateInfo::default()
             .application_info(&app_info)
-            .enabled_extension_names(&p_extenstions)
+            .enabled_extension_names(&extensions)
             .enabled_layer_names(&p_layers);
 
         let instance = unsafe {
