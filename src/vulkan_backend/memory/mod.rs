@@ -1,7 +1,7 @@
 pub mod buffer;
 pub mod config;
-pub mod manager;
 pub mod image;
+pub mod manager;
 pub mod memory;
 
 pub use buffer::{VBuffer, VUniformBuffer};

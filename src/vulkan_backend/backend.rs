@@ -2,6 +2,7 @@ use winit::window::Window;
 
 use crate::{
     constants::MAX_FRAMES_IN_FLIGHT,
+    log,
     vulkan_backend::{
         backend_event::VBackendEvent,
         device::{VDevice, VPhysicalDevice, config::VPhysicalDeviceConfig},
@@ -34,10 +35,10 @@ impl VBackend {
         );
         let v_physical_device = v_physical_devices.remove(0);
 
-        println!(
+        log!(format!(
             "Selected device: {:?}",
             v_physical_device.properties.device_name_as_c_str()
-        );
+        ));
 
         let v_device = VDevice::new(&v_instance, &v_surface, &v_physical_device);
         let v_memory_manager: VMemoryManager = VMemoryManager::new(&v_device);
@@ -75,11 +76,10 @@ impl VBackend {
             &self.v_memory_manager,
         );
 
-        //* Debug */
-        println!(
+        log!(format!(
             "Recreated Swapchain, width: {}, height: {}",
             self.v_swapchain.image_extent.width, self.v_swapchain.image_extent.height
-        );
+        ));
     }
 
     pub fn check_render_issues<'a>(

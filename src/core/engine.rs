@@ -1,13 +1,11 @@
 use ash::vk;
-use std::time::Instant;
-use std::{collections::HashMap, time::Duration};
-use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
-use winit::event_loop::EventLoop;
+use std::{collections::HashMap, time::Instant};
 use winit::window::Window;
 
 use crate::core::ecs::entities::game_object::GameObject;
+use crate::core::ecs::types::{CursorMovedEvent, KeyboardInputEvent};
 use crate::core::gpu::scene_render::RecordableScene;
+use crate::log;
 use crate::vulkan_backend::backend_event::VBackendEvent;
 use crate::{
     core::{
@@ -26,10 +24,9 @@ use crate::{
 
 pub struct GameEngine {
     // Core
-    window: Option<Window>,
-    v_backend: Option<VBackend>,
-    scene_renderer: Option<SceneRenderer>,
-    materials_manager: Option<MaterialsManager>,
+    v_backend: VBackend,
+    scene_renderer: SceneRenderer,
+    materials_manager: MaterialsManager,
 
     // Resources
     textures: HashMap<Id, ImageTexture>,
@@ -44,12 +41,15 @@ pub struct GameEngine {
 }
 
 impl GameEngine {
-    pub fn new() -> Self {
+    pub fn new(window: &Window) -> Self {
+        let v_backend = VBackend::new(window);
+        let scene_renderer = SceneRenderer::new(&v_backend);
+        let materials_manager = MaterialsManager::new(&v_backend.v_device);
+
         let mut engine = Self {
-            window: None,
-            v_backend: None,
-            scene_renderer: None,
-            materials_manager: None,
+            v_backend,
+            scene_renderer,
+            materials_manager,
             textures: HashMap::new(),
             active_scene: None,
             last_frame_instant: Instant::now(),
@@ -57,42 +57,33 @@ impl GameEngine {
             fps: 0,
         };
 
-        // Initialize Event Loop
-        let event_loop = EventLoop::new().unwrap();
-        let _ = event_loop.run_app(&mut engine);
+        engine.init();
 
         engine
     }
 
     pub fn init(&mut self) {
-        let v_backend = self.v_backend.as_ref().unwrap();
-        let materials_manager = self.materials_manager.as_mut().unwrap();
-        let scene_renderer = self.scene_renderer.as_ref().unwrap();
-
-        let default_texture = ImageTexture::empty(v_backend, vk::Format::R8G8B8A8_SRGB);
+        let default_texture = ImageTexture::empty(&self.v_backend, vk::Format::R8G8B8A8_SRGB);
         let default_texture_id = get_random_id();
         self.textures.insert(default_texture_id, default_texture);
-        let default_material_index = materials_manager.allocate_material(
-            &v_backend.v_device,
-            scene_renderer.get_image_sampler_layout(),
-        );
+        let sampler_layout = self.scene_renderer.get_image_sampler_layout();
+        let default_material_index = self
+            .materials_manager
+            .allocate_material(&self.v_backend.v_device, sampler_layout);
         let default_material = Material3D {
             manager_index: default_material_index,
         };
         let mut batch_writer = VDescriptorWriteBatch::new();
         default_material.queue_descriptor_writes(
-            materials_manager,
+            &mut self.materials_manager,
             &self.textures[&default_texture_id],
             &mut batch_writer,
         );
-        batch_writer.flush(&v_backend.v_device);
+        batch_writer.flush(&self.v_backend.v_device);
     }
 
     pub fn create_scene(&self) -> Scene {
-        Scene::new(
-            self.v_backend.as_ref().unwrap(),
-            self.scene_renderer.as_ref().unwrap(),
-        )
+        Scene::new(&self.v_backend, &self.scene_renderer)
     }
 
     pub fn get_active_scene(&mut self) -> &mut Scene {
@@ -107,14 +98,14 @@ impl GameEngine {
         let scene = self.active_scene.as_mut().expect("No active scene");
         scene
             .shadow_mapping
-            .add_spot_light(self.v_backend.as_ref().unwrap(), *entity.get_id());
+            .add_spot_light(&self.v_backend, *entity.get_id());
 
-        let shadow_map = scene
+        let _shadow_map = scene
             .shadow_mapping
             .spot_light_maps
             .get(entity.get_id())
             .unwrap();
-        let shadow_map_view = scene
+        let _shadow_map_view = scene
             .shadow_mapping
             .spot_light_views
             .get(entity.get_id())
@@ -135,22 +126,18 @@ impl GameEngine {
         let scene = self.active_scene.as_mut().expect("No active scene");
         scene
             .shadow_mapping
-            .remove_spot_light(self.v_backend.as_ref().unwrap(), entity.get_id());
+            .remove_spot_light(&self.v_backend, entity.get_id());
         // self.scene_render
         //     .v_shadow_rendering_system
         //     .remove_framebuffer(&self.v_backend.v_device, entity.get_id());
     }
 
     pub fn get_structure_3d_from_obj(&self, obj_path: &str) -> Structure3D {
-        Structure3D::from_obj(self.v_backend.as_ref().unwrap(), obj_path)
+        Structure3D::from_obj(&self.v_backend, obj_path)
     }
 
     pub fn load_texture_from_image(&mut self, image_path: &str) -> Id {
-        let texture = ImageTexture::new(
-            self.v_backend.as_ref().unwrap(),
-            image_path,
-            vk::Format::R8G8B8A8_SRGB,
-        );
+        let texture = ImageTexture::new(&self.v_backend, image_path, vk::Format::R8G8B8A8_SRGB);
         let id = get_random_id();
         self.textures.insert(id, texture);
         id
@@ -161,13 +148,10 @@ impl GameEngine {
             .textures
             .get(&texture)
             .expect("invalid texture id passed to get_material_3d_from_texture");
-        let allocated_sets_index = self.materials_manager.as_mut().unwrap().allocate_material(
-            &self.v_backend.as_ref().unwrap().v_device,
-            self.scene_renderer
-                .as_ref()
-                .unwrap()
-                .get_image_sampler_layout(),
-        );
+        let sampler_layout = self.scene_renderer.get_image_sampler_layout();
+        let allocated_sets_index = self
+            .materials_manager
+            .allocate_material(&self.v_backend.v_device, sampler_layout);
 
         let mut batch_writer = VDescriptorWriteBatch::new();
 
@@ -175,38 +159,44 @@ impl GameEngine {
             manager_index: allocated_sets_index,
         };
 
-        material.queue_descriptor_writes(
-            self.materials_manager.as_ref().unwrap(),
-            texture,
-            &mut batch_writer,
-        );
-        batch_writer.flush(&self.v_backend.as_ref().unwrap().v_device);
+        material.queue_descriptor_writes(&mut self.materials_manager, texture, &mut batch_writer);
+        batch_writer.flush(&self.v_backend.v_device);
         material
     }
 
     pub fn unload_texture(&mut self, texture: Id) {
         if let Some(tex) = self.textures.remove(&texture) {
-            tex.destroy(self.v_backend.as_ref().unwrap());
+            tex.destroy(&self.v_backend);
         }
     }
 
-    fn handle_window_events(&mut self) {
-        // let window_messages: Vec<(f64, WindowEvent)> =
-        //     glfw::flush_messages(&self.window.receiver).collect();
-        // for (_, event) in window_messages {
-        //     match event {
-        //         glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
-        //             self.window.pwindow.set_should_close(true);
-        //         }
-        //         _ => {}
-        //     }
-        //     if let Some(scene) = &mut self.active_scene {
-        //         scene.handle_window_event(&event);
-        //     }
-        // }
+    pub fn emit_update_framebuffers(&mut self, window: &Window) {
+        self.v_backend.recreate_swapchain(window);
+        let event = VBackendEvent::UpdateFramebuffers(
+            &self.v_backend.v_device,
+            &self.v_backend.v_swapchain,
+        );
+        self.scene_renderer.handle_backend_event(&event);
+        if let Some(scene) = &mut self.active_scene {
+            scene.handle_backend_event(&event);
+        }
     }
 
-    fn pre_render(&mut self) {
+    pub fn handle_keyboard_input(&mut self, event: &KeyboardInputEvent) {
+        if let Some(scene) = &mut self.active_scene {
+            scene.handle_keyboard_input(event);
+        }
+    }
+
+    pub fn handle_cursor_moved(&mut self, event: &CursorMovedEvent) {
+        if let Some(scene) = &mut self.active_scene {
+            scene.handle_cursor_moved(event);
+        }
+    }
+
+    pub fn pre_render(&mut self) {
+        log!("Game Engine pre render");
+
         let current_instant = Instant::now();
         let dt = current_instant.duration_since(self.last_frame_instant);
         self.last_frame_instant = current_instant;
@@ -214,41 +204,30 @@ impl GameEngine {
         // Frame Count and FPS
         self.fps = (1.0 / dt.as_secs_f64()) as usize;
         self.frame_count += 1;
-        // println!("FPS: {}", self.fps);
+        log!(format!("FPS: {}", self.fps));
 
         // Pre-render the scene
         if let Some(scene) = &mut self.active_scene {
-            scene.pre_render(self.v_backend.as_ref().unwrap(), dt.as_secs_f32());
+            scene.pre_render(&self.v_backend, dt.as_secs_f32());
         }
     }
 
-    fn render(&mut self) {
+    pub fn render(&mut self, window: &Window) {
         // render
-        let render_result = self
-            .v_backend
-            .as_ref()
-            .unwrap()
-            .render(|info| self.render_scene(&info));
+        log!("Game Engine render");
+
+        let render_result = self.v_backend.render(|info| self.render_scene(&info));
 
         // check render result
-        if let Some(event) = self
-            .v_backend
-            .as_mut()
-            .unwrap()
-            .check_render_issues(self.window.as_ref().unwrap(), render_result)
-        {
-            self.scene_renderer
-                .as_mut()
-                .unwrap()
-                .handle_backend_event(&event);
+        if let Some(event) = self.v_backend.check_render_issues(window, render_result) {
+            self.scene_renderer.handle_backend_event(&event);
             if let Some(scene) = &mut self.active_scene {
                 scene.handle_backend_event(&event);
             }
 
-            //* Debug */
             match event {
                 VBackendEvent::UpdateFramebuffers(..) => {
-                    println!("Update framebuffer, frame: {}", self.frame_count);
+                    log!("Update framebuffer, frame: {}", self.frame_count);
                 }
                 _ => (),
             }
@@ -257,68 +236,31 @@ impl GameEngine {
 
     fn render_scene(&self, ctx: &VFrameRenderContext) {
         if let Some(scene) = &self.active_scene {
+            log!("Scene render started");
             let recordables: [&dyn RecordableScene; 1] = [scene];
-            self.scene_renderer.as_ref().unwrap().render(
-                &self.v_backend.as_ref().unwrap().v_device,
-                self.materials_manager.as_ref().unwrap(),
+            self.scene_renderer.render(
+                &self.v_backend.v_device,
+                &self.materials_manager,
                 ctx,
                 &recordables,
             );
+            log!("Scene render end");
+        } else {
+            log!("No active scene found to render");
         }
     }
 
     pub fn destroy(mut self) {
-        self.v_backend.as_ref().unwrap().v_device.wait_till_idle();
+        self.v_backend.v_device.wait_till_idle();
         if let Some(scene) = &self.active_scene {
-            scene.destroy(self.v_backend.as_ref().unwrap());
+            scene.destroy(&self.v_backend);
         }
         // Destroy all engine-owned textures
         for (_, tex) in self.textures.drain() {
-            tex.destroy(self.v_backend.as_ref().unwrap());
+            tex.destroy(&self.v_backend);
         }
-        self.scene_renderer
-            .as_ref()
-            .unwrap()
-            .destroy(&self.v_backend.as_ref().unwrap().v_device);
-        self.materials_manager
-            .as_ref()
-            .unwrap()
-            .destroy(&self.v_backend.as_ref().unwrap().v_device);
-        self.v_backend.as_ref().unwrap().destroy();
-    }
-}
-
-impl ApplicationHandler for GameEngine {
-    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        self.window = Some(
-            event_loop
-                .create_window(Window::default_attributes())
-                .expect("failed to create window"),
-        );
-
-        self.v_backend = Some(VBackend::new(self.window.as_ref().unwrap()));
-        self.scene_renderer = Some(SceneRenderer::new(self.v_backend.as_ref().unwrap()));
-        self.materials_manager = Some(MaterialsManager::new(
-            &self.v_backend.as_ref().unwrap().v_device,
-        ));
-
-        self.init();
-    }
-
-    fn window_event(
-        &mut self,
-        event_loop: &winit::event_loop::ActiveEventLoop,
-        window_id: winit::window::WindowId,
-        event: winit::event::WindowEvent,
-    ) {
-        match event {
-            WindowEvent::RedrawRequested => {
-                self.pre_render();
-                self.render();
-
-                self.window.as_ref().unwrap().request_redraw();
-            }
-            _ => (),
-        }
+        self.scene_renderer.destroy(&self.v_backend.v_device);
+        self.materials_manager.destroy(&self.v_backend.v_device);
+        self.v_backend.destroy();
     }
 }

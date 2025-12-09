@@ -1,16 +1,36 @@
-use benzene::core::{
-    GameEngine,
-    ecs::{
-        components::{Camera3D, Structure3D, Transform3D, spot_light_3d::SpotLight3D},
-        entities::game_object::GameObject,
+use benzene::{
+    core::{
+        GameEngine,
+        app::BenzeneApp,
+        ecs::{
+            components::{
+                Camera3D, PointLight3D, Structure3D, Transform3D, spot_light_3d::SpotLight3D,
+            },
+            entities::game_object::GameObject,
+        },
     },
+    log,
 };
 use nalgebra::{Vector3, Vector4};
 
 fn main() {
-    let mut game_engine = GameEngine::new();
+    let app = BenzeneApp::new({}, Box::new(on_init), Box::new(on_new_frame));
 
-    let mut scene = game_engine.create_scene();
+    // let scene = game_engine.get_active_scene();
+    // let sun_transform_3d = scene.get_transform_3d_component(&sun);
+    // rotate_transform_3d(
+    //     sun_transform_3d,
+    //     Vector3::new(0.0, 0.0, 1.0 * dt.as_secs_f32()),
+    // );
+    // scene.mark_directional_light_3d_dirty();
+
+    // game_engine.destroy();
+}
+
+pub fn on_init(engine: &mut GameEngine) {
+    log!("On Init");
+
+    let mut scene = engine.create_scene();
 
     // Textures
     // let grass_texture = game_engine.load_texture_from_image("assets/textures/grass/color.jpg");
@@ -22,7 +42,7 @@ fn main() {
     scene.add_camera_3d_component(&camera_entity, Camera3D::new_default());
     scene.set_active_camera(&camera_entity);
 
-    // // Sun
+    // Sun
     // let sun = GameObject::new("Sun");
     // scene.add_game_object(sun.clone());
     // scene.add_transform_3d_component(
@@ -54,7 +74,7 @@ fn main() {
         SpotLight3D::new(Vector4::new(1.0, 1.0, 1.0, 10.0)),
     );
 
-    // // Red Light
+    // Red Light
     // let red_light_entity = GameObject::new("Red Light");
     // scene.add_game_object(red_light_entity.clone());
     // scene.add_transform_3d_component(
@@ -72,7 +92,7 @@ fn main() {
 
     // Plane
     let plane_entity = GameObject::new("Plane");
-    let plane_structure = game_engine.get_structure_3d_from_obj("assets/models/plane.obj");
+    let plane_structure = engine.get_structure_3d_from_obj("assets/models/plane.obj");
     // let plane_material = game_engine.get_material_3d_from_texture(grass_texture);
     scene.add_game_object(plane_entity.clone());
     scene.add_transform_3d_component(
@@ -89,7 +109,7 @@ fn main() {
     // Smooth Vase
     let smooth_vase_entity = GameObject::new("Smooth Vase");
     let smooth_vase: Structure3D =
-        game_engine.get_structure_3d_from_obj("assets/models/vase-smooth.obj");
+        engine.get_structure_3d_from_obj("assets/models/vase-smooth.obj");
     // let smooth_vase_material = game_engine.get_material_3d_from_texture(marble_texture);
     scene.add_game_object(smooth_vase_entity.clone());
     scene.add_transform_3d_component(
@@ -103,15 +123,7 @@ fn main() {
     scene.add_structure_3d_component(&smooth_vase_entity, smooth_vase);
     // scene.add_material_3d_component(&smooth_vase_entity, smooth_vase_material);
 
-    game_engine.set_active_scene(scene);
-
-    // let scene = game_engine.get_active_scene();
-    // let sun_transform_3d = scene.get_transform_3d_component(&sun);
-    // rotate_transform_3d(
-    //     sun_transform_3d,
-    //     Vector3::new(0.0, 0.0, 1.0 * dt.as_secs_f32()),
-    // );
-    // scene.mark_directional_light_3d_dirty();
-
-    game_engine.destroy();
+    engine.set_active_scene(scene);
 }
+
+pub fn on_new_frame(engine: &mut GameEngine) {}

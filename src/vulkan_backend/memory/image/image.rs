@@ -1,8 +1,8 @@
+use crate::vulkan_backend::memory::image::config::VImageConfig;
 use crate::vulkan_backend::{
     device::{VDevice, VPhysicalDevice},
     memory::{VBuffer, VBufferConfig, VMemory, VMemoryManager},
 };
-use crate::vulkan_backend::memory::image::config::VImageConfig;
 use ash::vk;
 
 pub enum VImageOwnership {
@@ -47,7 +47,12 @@ impl VImage {
             image_info = image_info.queue_family_indices(&queue_families);
         }
 
-        let image = unsafe { v_device.device.create_image(&image_info, None).expect("failed to create image") };
+        let image = unsafe {
+            v_device
+                .device
+                .create_image(&image_info, None)
+                .expect("failed to create image")
+        };
 
         let memory_requirements = unsafe { v_device.device.get_image_memory_requirements(image) };
 
@@ -59,7 +64,12 @@ impl VImage {
             config.memory_property,
         );
 
-        unsafe { v_device.device.bind_image_memory(image, v_memory.memory, 0).expect("failed to bind buffer memory") };
+        unsafe {
+            v_device
+                .device
+                .bind_image_memory(image, v_memory.memory, 0)
+                .expect("failed to bind buffer memory")
+        };
 
         Self {
             image,
@@ -70,10 +80,7 @@ impl VImage {
         }
     }
 
-    pub fn from_external(
-        image: vk::Image,
-        config: VImageConfig,
-    ) -> Self {
+    pub fn from_external(image: vk::Image, config: VImageConfig) -> Self {
         Self {
             image,
             v_memory: None,
@@ -132,15 +139,13 @@ impl VImage {
                 .image_subresource(subresource_layer);
 
             unsafe {
-                v_device
-                    .device
-                    .cmd_copy_buffer_to_image(
-                        cmd,
-                        staging_buffer.buffer,
-                        self.image,
-                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                        &[region],
-                    )
+                v_device.device.cmd_copy_buffer_to_image(
+                    cmd,
+                    staging_buffer.buffer,
+                    self.image,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    &[region],
+                )
             };
 
             self.transition_layout(

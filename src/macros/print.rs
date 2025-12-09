@@ -27,13 +27,13 @@ macro_rules! print_dash_no_newline {
 #[macro_export]
 macro_rules! print_separator {
     ($text:expr) => {
-        $crate::print_separator_fn($text, 80, '-');
+        $crate::macros::print::print_separator_fn($text, 80, '-');
     };
     ($text:expr, $length:expr) => {
-        $crate::print_separator_fn($text, $length, '-');
+        $crate::macros::print::print_separator_fn($text, $length, '-');
     };
     ($text:expr, $length:expr, $char:expr) => {
-        $crate::print_separator_fn($text, $length, $char);
+        $crate::macros::print::print_separator_fn($text, $length, $char);
     };
 }
 
@@ -44,4 +44,27 @@ pub fn print_separator_fn(text: &str, length: usize, ch: char) {
     let left_separator = ch.to_string().repeat(separator_length);
     let right_separator = ch.to_string().repeat(separator_length);
     println!("\n{} {} {}\n", left_separator, text, right_separator);
+}
+
+#[macro_export]
+macro_rules! log {
+    ($msg:expr) => {
+        if $crate::constants::DEBUG {
+            println!(
+                "INFO[{}]: {}",
+                chrono::Local::now().format("%Y/%m/%d %H:%M"),
+                $msg
+            );
+        }
+    };
+    ($type:expr, $msg:expr) => {
+        if $crate::constants::DEBUG {
+            println!(
+                "{}[{}]: {}",
+                chrono::Local::now().format("%Y/%m/%d %H:%M"),
+                $type,
+                $msg
+            );
+        }
+    };
 }

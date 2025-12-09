@@ -1,4 +1,5 @@
 use crate::core::model_push_constant::ModelPushConstant;
+use crate::log;
 use crate::shared::types::Id;
 use crate::vulkan_backend::descriptor::VDescriptorSetLayout;
 use crate::vulkan_backend::descriptor::config::{
@@ -65,7 +66,7 @@ impl GeometryLightingRenderStage {
         let subpasses = [subpass];
 
         let mut subpass_dependencies: Vec<vk::SubpassDependency> = Vec::new();
-        subpass_dependencies.push(
+        subpass_dependencies.extend([
             vk::SubpassDependency::default()
                 .src_subpass(vk::SUBPASS_EXTERNAL)
                 .dst_subpass(0)
@@ -75,15 +76,13 @@ impl GeometryLightingRenderStage {
                     vk::AccessFlags::COLOR_ATTACHMENT_READ
                         | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
                 ),
-        );
-        subpass_dependencies.push(
             vk::SubpassDependency::default()
                 .src_subpass(vk::SUBPASS_EXTERNAL)
                 .dst_subpass(0)
                 .src_stage_mask(vk::PipelineStageFlags::LATE_FRAGMENT_TESTS)
                 .dst_stage_mask(vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
                 .dst_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE),
-        );
+        ]);
 
         let attachments = [color_attachment, depth_attachment];
         let render_pass_info = vk::RenderPassCreateInfo::default()
@@ -263,6 +262,8 @@ impl GeometryLightingRenderStage {
     }
 
     pub fn start(&self, v_device: &VDevice, cmd: vk::CommandBuffer, image_id: &Id) {
+        log!("Starting geometry and lignting render pass");
+
         let render_area = self.render_area.expect("render_area not set");
 
         let framebuffer = *self.v_framebuffers.get_by_id(image_id);

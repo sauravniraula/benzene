@@ -11,12 +11,12 @@ impl Structure3D {
     }
 
     pub fn from_obj(v_backend: &VBackend, obj_path: &str) -> Self {
-        Self { model: Model::from_obj(v_backend, obj_path) }
+        Self {
+            model: Model::from_obj(v_backend, obj_path),
+        }
     }
 
     pub fn destroy(&self, v_backend: &VBackend) {
         self.model.destroy(v_backend);
     }
 }
-
-

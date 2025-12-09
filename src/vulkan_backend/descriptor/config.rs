@@ -11,7 +11,6 @@ pub struct VDescriptorLayoutConfig {
     pub bindings: Vec<VDescriptorBindingConfig>,
 }
 
-
 pub struct VDescriptorPoolTypeConfig {
     pub descriptor_type: vk::DescriptorType,
     pub count: u32,

@@ -1,6 +1,6 @@
-pub mod instance;
 pub mod config;
 pub mod debug;
+pub mod instance;
 
-pub use instance::VInstance;
 pub use config::VInstanceConfig;
+pub use instance::VInstance;

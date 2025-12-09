@@ -1,12 +1,16 @@
 use nalgebra::Vector3;
-use std::collections::HashSet;
 
-use crate::core::ecs::components::Transform3D;
+use crate::core::ecs::{
+    components::Transform3D,
+    types::{CursorMovedEvent, KeyboardInputEvent},
+};
 
 pub struct Camera3D {
     pub transform: Transform3D,
     pub speed: f32,
     pub rotation_speed: f32,
+    pub ki_events: Vec<KeyboardInputEvent>,
+    pub cm_events: Vec<CursorMovedEvent>,
 }
 
 impl Camera3D {
@@ -15,6 +19,8 @@ impl Camera3D {
             transform,
             speed: 5.0,
             rotation_speed: 1.5,
+            ki_events: vec![],
+            cm_events: vec![]
         }
     }
 

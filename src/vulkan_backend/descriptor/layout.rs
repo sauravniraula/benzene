@@ -1,6 +1,9 @@
 use ash::vk;
 
-use crate::vulkan_backend::{descriptor::config::{VDescriptorLayoutConfig, VDescriptorBindingConfig}, device::VDevice};
+use crate::vulkan_backend::{
+    descriptor::config::{VDescriptorBindingConfig, VDescriptorLayoutConfig},
+    device::VDevice,
+};
 
 pub struct VDescriptorSetLayout {
     pub layout: vk::DescriptorSetLayout,
