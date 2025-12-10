@@ -326,7 +326,7 @@ impl Scene {
                 }
 
                 if let Some(light_transform) = self.transform_3d_components.get(entity_id) {
-                    let direction_raw = (light_transform.get_unit_quaternion()
+                    let direction_raw = (light_transform.get_rotation3()
                         * nalgebra::Vector3::new(0.0, 0.0, -1.0))
                     .to_homogeneous();
                     let direction =
@@ -364,9 +364,8 @@ impl Scene {
                         v_backend,
                         index,
                         &position,
-                        &(light_transform.get_unit_quaternion()
-                            * nalgebra::Vector3::new(0.0, 0.0, -1.0))
-                        .to_homogeneous(),
+                        &(light_transform.get_rotation3() * nalgebra::Vector3::new(0.0, 0.0, -1.0))
+                            .to_homogeneous(),
                         &spot_light.color,
                     );
                 }

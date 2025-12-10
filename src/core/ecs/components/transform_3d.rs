@@ -1,5 +1,5 @@
 use ash::vk::Extent2D;
-use nalgebra::{Matrix4, Perspective3, Rotation3, Translation3, UnitQuaternion, Vector3};
+use nalgebra::{Matrix4, Perspective3, Rotation3, Translation3, Vector3};
 
 #[derive(Clone, Debug)]
 pub struct Transform3D {
@@ -28,18 +28,17 @@ impl Transform3D {
         )
     }
 
-    pub fn get_unit_quaternion(&self) -> UnitQuaternion<f32> {
-        UnitQuaternion::from_euler_angles(self.rotation.x, self.rotation.y, self.rotation.z)
+    pub fn get_rotation3(&self) -> Rotation3<f32> {
+        let rot = self.rotation;
+        Rotation3::from_euler_angles(rot.x, rot.y, rot.z)
     }
 
     pub fn get_transform_3d_view_projection(
         &self,
         image_extent: Extent2D,
     ) -> (Matrix4<f32>, Matrix4<f32>) {
-        let rot = self.rotation;
         let pos = self.position;
-        let r = Rotation3::from_euler_angles(rot.x, rot.y, rot.z);
-        let r_inv = r.inverse();
+        let r_inv = self.get_rotation3().inverse();
         let t_inv = Translation3::new(-pos.x, -pos.y, -pos.z);
         let view = r_inv.to_homogeneous() * t_inv.to_homogeneous();
 

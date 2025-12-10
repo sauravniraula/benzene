@@ -1,4 +1,4 @@
-use nalgebra::{Matrix4, Rotation3, Translation3, Unit, UnitQuaternion, Vector3};
+use nalgebra::{Matrix4, Rotation3, Translation3, Unit, Vector3};
 
 use crate::core::ecs::components::Transform3D;
 
@@ -41,7 +41,6 @@ pub fn update_transforms_3d(transforms: &mut [Transform3D]) {
     }
 }
 
-// Orbit position around a world-space pivot along an axis by angle (radians)
 pub fn orbit_transform_3d_around_pivot(
     t: &mut Transform3D,
     pivot: Vector3<f32>,
@@ -53,9 +52,9 @@ pub fn orbit_transform_3d_around_pivot(
     }
 
     let axis_unit: Unit<Vector3<f32>> = Unit::new_normalize(axis);
-    let delta_q = UnitQuaternion::from_axis_angle(&axis_unit, angle);
+    let delta_r = Rotation3::from_axis_angle(&axis_unit, angle);
     let relative = t.position - pivot;
-    let rotated = delta_q.transform_vector(&relative);
+    let rotated = delta_r * relative;
     t.position = pivot + rotated;
     t.dirty = true;
 }
