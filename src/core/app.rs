@@ -1,6 +1,5 @@
 use winit::{
     application::ApplicationHandler,
-    dpi::PhysicalPosition,
     event::{ElementState, MouseButton, WindowEvent},
     event_loop::{self, EventLoop},
     window::Window,

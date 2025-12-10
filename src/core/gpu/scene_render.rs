@@ -6,10 +6,11 @@ use crate::{
         render_stage::geometry_and_lighting::{
             GeometryLightingRenderStage, GeometryLightingRenderStageConfig,
         },
-    }, log, vulkan_backend::{
+    },
+    vulkan_backend::{
         backend::VBackend, backend_event::VBackendEvent, descriptor::VDescriptorSetLayout,
         device::VDevice, frame::context::VFrameRenderContext, swapchain::VSwapchain,
-    }
+    },
 };
 pub trait RecordableScene {
     fn record_scene(
@@ -42,21 +43,14 @@ impl SceneRenderer {
             },
         );
 
-        let mut scene_renderer = Self {
-            gl_rs,
-        };
+        let mut scene_renderer = Self { gl_rs };
 
-        scene_renderer
-            .init_gl_rs(&v_backend.v_device, &v_backend.v_swapchain);
+        scene_renderer.init_gl_rs(&v_backend.v_device, &v_backend.v_swapchain);
 
         scene_renderer
     }
 
-    pub fn init_gl_rs(
-        &mut self,
-        v_device: &VDevice,
-        v_swapchain: &VSwapchain,
-    ) {
+    pub fn init_gl_rs(&mut self, v_device: &VDevice, v_swapchain: &VSwapchain) {
         self.gl_rs.init_framebuffers(
             v_device,
             &v_swapchain.image_ids,
@@ -99,8 +93,7 @@ impl SceneRenderer {
         recordables: &[&dyn RecordableScene],
     ) {
         // Geometry Pass
-        self.gl_rs
-            .start(v_device, ctx.cmd, &ctx.image_id);
+        self.gl_rs.start(v_device, ctx.cmd, &ctx.image_id);
 
         unsafe {
             v_device.device.cmd_bind_pipeline(

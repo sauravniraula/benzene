@@ -39,7 +39,6 @@ use ash::vk;
 use nalgebra::Vector4;
 use std::collections::HashMap;
 use std::mem::size_of;
-use winit::{event::ElementState, keyboard::PhysicalKey};
 
 pub struct Scene {
     default_descriptor_pool: VDescriptorPool,

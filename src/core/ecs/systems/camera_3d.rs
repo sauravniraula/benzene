@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use nalgebra::{Rotation3, Unit, Vector3};
+use nalgebra::{Rotation3, Vector3};
 use winit::{
     event::ElementState,
     keyboard::{KeyCode, PhysicalKey},

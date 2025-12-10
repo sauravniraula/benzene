@@ -37,7 +37,7 @@ pub struct GameEngine {
     last_frame_instant: Instant,
     frame_count: usize,
     fps: usize,
-    frame_time: Duration,
+    pub frame_time: Duration,
 }
 
 impl GameEngine {
