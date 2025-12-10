@@ -1,4 +1,5 @@
 use ash::vk;
+use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 use winit::window::Window;
 
@@ -34,10 +35,9 @@ pub struct GameEngine {
     // State
     active_scene: Option<Scene>,
     last_frame_instant: Instant,
-
-    // Debug
     frame_count: usize,
     fps: usize,
+    frame_time: Duration,
 }
 
 impl GameEngine {
@@ -55,6 +55,7 @@ impl GameEngine {
             last_frame_instant: Instant::now(),
             frame_count: 0,
             fps: 0,
+            frame_time: Duration::new(0, 0),
         };
 
         engine.init();
@@ -204,6 +205,7 @@ impl GameEngine {
         // Frame Count and FPS
         self.fps = (1.0 / dt.as_secs_f64()) as usize;
         self.frame_count += 1;
+        self.frame_time = dt;
         log!(format!("FPS: {}", self.fps));
 
         // Pre-render the scene

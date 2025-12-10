@@ -1,5 +1,5 @@
 use ash::vk::Extent2D;
-use nalgebra::{Matrix4, Perspective3, Translation3, UnitQuaternion, Vector3};
+use nalgebra::{Matrix4, Perspective3, Rotation3, Translation3, UnitQuaternion, Vector3};
 
 #[derive(Clone, Debug)]
 pub struct Transform3D {
@@ -36,10 +36,9 @@ impl Transform3D {
         &self,
         image_extent: Extent2D,
     ) -> (Matrix4<f32>, Matrix4<f32>) {
-        // Build view matrix from position and euler
+        let rot = self.rotation;
         let pos = self.position;
-        // Our current convention stores yaw in Y, pitch in X, roll in Z
-        let r = self.get_unit_quaternion();
+        let r = Rotation3::from_euler_angles(rot.x, rot.y, rot.z);
         let r_inv = r.inverse();
         let t_inv = Translation3::new(-pos.x, -pos.y, -pos.z);
         let view = r_inv.to_homogeneous() * t_inv.to_homogeneous();

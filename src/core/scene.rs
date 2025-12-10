@@ -280,7 +280,11 @@ impl Scene {
                 .camera_3d_components
                 .get_mut(&active_camera_id)
                 .expect("failed to get active camera from id");
-            if self.is_extent_dirty || camera_3d.ki_events.len() > 0 || camera_3d.transform.dirty {
+            if self.is_extent_dirty
+                || camera_3d.ki_events.len() > 0
+                || camera_3d.cm_events.len() > 0
+                || camera_3d.transform.dirty
+            {
                 camera_3d_compute_transform(camera_3d, dt);
                 let (view, projection) = camera_3d
                     .transform

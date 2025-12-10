@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use nalgebra::Vector3;
+use nalgebra::{Rotation3, Unit, Vector3};
 use winit::{
     event::ElementState,
     keyboard::{KeyCode, PhysicalKey},
@@ -35,20 +35,45 @@ pub fn camera_3d_handle_ki_event(camera: &mut Camera3D, event: &KeyboardInputEve
     }
 }
 
-pub fn camera_3d_handle_cm_event(camera: &mut Camera3D, event: &CursorMovedEvent) {}
+pub fn camera_3d_handle_cm_event(camera: &mut Camera3D, event: &CursorMovedEvent) {
+    camera.cm_events.push(event.clone());
+}
 
 pub fn camera_3d_compute_transform(camera: &mut Camera3D, dt: f32) {
     log!("Computing camera 3d transform");
 
+    let mut d_rot = Vector3::<f32>::new(0.0, 0.0, 0.0);
+
+    let mut last_x = 0.0;
+    let mut last_y = 0.0;
+    let mut is_first = true;
+    for event in camera.cm_events.iter() {
+        if !is_first {
+            d_rot.y += (event.x - last_x) as f32;
+            d_rot.x += (event.y - last_y) as f32;
+        }
+        last_x = event.x;
+        last_y = event.y;
+        is_first = false;
+    }
+
+    // Directions
+    let ea = camera.transform.rotation;
+    let rotation = Rotation3::from_euler_angles(ea.x, ea.y, ea.z);
+    let fv = Vector3::<f32>::new(0.0, 0.0, -1.0);
+    let fv = (rotation * fv).normalize();
+    let uv = Vector3::y();
+    let rv = fv.cross(&uv).normalize();
+
     let mut d_pos = Vector3::new(0.0, 0.0, 0.0);
 
     let key_dir = [
-        (KeyCode::KeyW, Vector3::new(0.0, 0.0, -1.0)),
-        (KeyCode::KeyS, Vector3::new(0.0, 0.0, 1.0)),
-        (KeyCode::KeyA, Vector3::new(-1.0, 0.0, 0.0)),
-        (KeyCode::KeyD, Vector3::new(1.0, 0.0, 0.0)),
-        (KeyCode::Space, Vector3::new(0.0, 1.0, 0.0)),
-        (KeyCode::AltLeft, Vector3::new(0.0, -1.0, 0.0)),
+        (KeyCode::KeyW, fv),
+        (KeyCode::KeyS, -fv),
+        (KeyCode::KeyA, -rv),
+        (KeyCode::KeyD, rv),
+        (KeyCode::Space, uv),
+        (KeyCode::AltLeft, -uv),
     ];
 
     let mut pressed: HashSet<KeyCode> = HashSet::new();
@@ -72,10 +97,8 @@ pub fn camera_3d_compute_transform(camera: &mut Camera3D, dt: f32) {
         }
     }
 
-    camera.transform.position += d_pos * dt * camera.speed;
-    camera.transform.dirty = true;
-
     // Clear events and add those still not released
+    camera.cm_events.clear();
     camera.ki_events.clear();
     for key in pressed {
         camera.ki_events.push(KeyboardInputEvent {
@@ -84,4 +107,8 @@ pub fn camera_3d_compute_transform(camera: &mut Camera3D, dt: f32) {
             repeat: true,
         });
     }
+
+    camera.transform.position += d_pos * dt * camera.speed;
+    camera.transform.rotation += d_rot * dt * camera.rotation_speed;
+    camera.transform.dirty = true;
 }

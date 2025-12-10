@@ -7,13 +7,10 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug unit tests in library 'vulkan_engine'",
+      "name": "Run vulkan_engine",
       "cargo": {
         "args": [
-          "test",
-          "--no-run",
-          "--lib",
-          "--package=vulkan_engine"
+          "run",
         ],
         "filter": {
           "name": "vulkan_engine",

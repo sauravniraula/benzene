@@ -1,4 +1,4 @@
-use nalgebra::{Matrix4, Translation3, Unit, UnitQuaternion, Vector3};
+use nalgebra::{Matrix4, Rotation3, Translation3, Unit, UnitQuaternion, Vector3};
 
 use crate::core::ecs::components::Transform3D;
 
@@ -26,7 +26,7 @@ pub fn scale_transform_3d_set(t: &mut Transform3D, new_scale: Vector3<f32>) {
 }
 
 pub fn update_transform_3d_matrix(t: &mut Transform3D) {
-    let r = UnitQuaternion::from_euler_angles(t.rotation.x, t.rotation.y, t.rotation.z);
+    let r = Rotation3::from_euler_angles(t.rotation.x, t.rotation.y, t.rotation.z);
     let s = Matrix4::new_nonuniform_scaling(&t.scale);
     let tr = Translation3::new(t.position.x, t.position.y, t.position.z);
     t.cached_transform = tr.to_homogeneous() * r.to_homogeneous() * s;

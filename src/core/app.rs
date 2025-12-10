@@ -1,6 +1,7 @@
 use winit::{
     application::ApplicationHandler,
-    event::WindowEvent,
+    dpi::PhysicalPosition,
+    event::{ElementState, MouseButton, WindowEvent},
     event_loop::{self, EventLoop},
     window::Window,
 };
@@ -13,30 +14,32 @@ use crate::{
     log,
 };
 
-type BenzeneAppCallback = dyn FnMut(&mut GameEngine);
+type BenzeneAppCallback<S> = dyn FnMut(&mut GameEngine, &mut S);
 
-pub struct BenzeneApp {
+pub struct BenzeneApp<S> {
     window: Option<Window>,
     engine: Option<GameEngine>,
-    on_init: Box<BenzeneAppCallback>,
-    on_new_frame: Box<BenzeneAppCallback>,
+    on_init: Box<BenzeneAppCallback<S>>,
+    on_new_frame: Box<BenzeneAppCallback<S>>,
 
     // State
-    state: Box<dyn std::any::Any>,
+    state: S,
+    cursor_locked: bool,
 }
 
-impl BenzeneApp {
-    pub fn new<S: 'static>(
-        initial_state: S,
-        on_init: Box<BenzeneAppCallback>,
-        on_new_frame: Box<BenzeneAppCallback>,
+impl<S> BenzeneApp<S> {
+    pub fn new(
+        state: S,
+        on_init: Box<BenzeneAppCallback<S>>,
+        on_new_frame: Box<BenzeneAppCallback<S>>,
     ) -> Self {
         let mut app = Self {
             window: None,
             engine: None,
             on_init,
             on_new_frame,
-            state: Box::new(initial_state),
+            state,
+            cursor_locked: false,
         };
         let event_loop = EventLoop::new().expect("failed to create event loop");
         let _ = event_loop.run_app(&mut app);
@@ -47,7 +50,7 @@ impl BenzeneApp {
     pub fn run() {}
 }
 
-impl ApplicationHandler for BenzeneApp {
+impl<S> ApplicationHandler for BenzeneApp<S> {
     fn resumed(&mut self, event_loop: &event_loop::ActiveEventLoop) {
         let window = event_loop
             .create_window(Window::default_attributes())
@@ -55,7 +58,7 @@ impl ApplicationHandler for BenzeneApp {
 
         let mut engine = GameEngine::new(&window);
 
-        (self.on_init)(&mut engine);
+        (self.on_init)(&mut engine, &mut self.state);
 
         self.engine = Some(engine);
         self.window = Some(window);
@@ -81,13 +84,25 @@ impl ApplicationHandler for BenzeneApp {
 
                 engine.handle_keyboard_input(&ki_event);
             }
+            WindowEvent::MouseInput { state, button, .. } => {
+                if let (ElementState::Pressed, MouseButton::Left) = (state, button) {
+                    self.cursor_locked = true;
+                }
+                if let (ElementState::Released, MouseButton::Left) = (state, button) {
+                    self.cursor_locked = false;
+                }
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 let cm_event = CursorMovedEvent::new(position.x, position.y);
                 log!(format!("WindowEvent: CursorMoved - {:?}", cm_event));
+
+                if self.cursor_locked {
+                    engine.handle_cursor_moved(&cm_event);
+                }
             }
             WindowEvent::RedrawRequested => {
                 log!("---------------------------------");
-                (self.on_new_frame)(engine);
+                (self.on_new_frame)(engine, &mut self.state);
                 engine.pre_render();
                 engine.render(window);
 

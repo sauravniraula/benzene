@@ -13,8 +13,14 @@ use benzene::{
 };
 use nalgebra::{Vector3, Vector4};
 
+pub struct GameState {
+    pub camera: GameObject,
+    pub spot_light: GameObject,
+    pub plane: GameObject,
+}
+
 fn main() {
-    let app = BenzeneApp::new({}, Box::new(on_init), Box::new(on_new_frame));
+    let app = BenzeneApp::<Option<GameState>>::new(None, Box::new(on_init), Box::new(on_new_frame));
 
     // let scene = game_engine.get_active_scene();
     // let sun_transform_3d = scene.get_transform_3d_component(&sun);
@@ -27,7 +33,7 @@ fn main() {
     // game_engine.destroy();
 }
 
-pub fn on_init(engine: &mut GameEngine) {
+pub fn on_init(engine: &mut GameEngine, state: &mut Option<GameState>) {
     log!("On Init");
 
     let mut scene = engine.create_scene();
@@ -124,6 +130,12 @@ pub fn on_init(engine: &mut GameEngine) {
     // scene.add_material_3d_component(&smooth_vase_entity, smooth_vase_material);
 
     engine.set_active_scene(scene);
+
+    *state = Some(GameState {
+        camera: camera_entity,
+        spot_light: spot_light_entity,
+        plane: plane_entity,
+    });
 }
 
-pub fn on_new_frame(engine: &mut GameEngine) {}
+pub fn on_new_frame(engine: &mut GameEngine, state: &mut Option<GameState>) {}
