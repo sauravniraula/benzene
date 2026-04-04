@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ash::vk;
 
 use crate::{
-    shared::types::Id,
+    core::ecs::entities::Entity,
     vulkan_backend::{
         backend::VBackend,
         memory::image::{VImage, VImageConfig, image_view::VImageView, sampler::VSampler},
@@ -11,9 +11,9 @@ use crate::{
 };
 
 pub struct ShadowMapping {
-    pub spot_light_maps: HashMap<Id, VImage>,
-    pub spot_light_views: HashMap<Id, VImageView>,
-    pub spot_light_samplers: HashMap<Id, VSampler>,
+    pub spot_light_maps: HashMap<Entity, VImage>,
+    pub spot_light_views: HashMap<Entity, VImageView>,
+    pub spot_light_samplers: HashMap<Entity, VSampler>,
 }
 
 impl ShadowMapping {
@@ -25,7 +25,7 @@ impl ShadowMapping {
         }
     }
 
-    pub fn add_spot_light(&mut self, v_backend: &VBackend, entity_id: Id) {
+    pub fn add_spot_light(&mut self, v_backend: &VBackend, entity_id: Entity) {
         let extent = v_backend.v_swapchain.image_extent;
         let spot_light_map = VImage::new(
             &v_backend.v_device,
@@ -61,7 +61,7 @@ impl ShadowMapping {
             .insert(entity_id, spot_light_sampler);
     }
 
-    pub fn remove_spot_light(&mut self, v_backend: &VBackend, entity_id: &Id) {
+    pub fn remove_spot_light(&mut self, v_backend: &VBackend, entity_id: &Entity) {
         if let Some(image) = self.spot_light_maps.remove(entity_id) {
             image.destroy(&v_backend.v_device, &v_backend.v_memory_manager);
         }

@@ -86,9 +86,11 @@ impl<S> ApplicationHandler for BenzeneApp<S> {
             WindowEvent::MouseInput { state, button, .. } => {
                 if let (ElementState::Pressed, MouseButton::Left) = (state, button) {
                     self.cursor_locked = true;
+                    engine.reset_cursor_tracking();
                 }
                 if let (ElementState::Released, MouseButton::Left) = (state, button) {
                     self.cursor_locked = false;
+                    engine.reset_cursor_tracking();
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {

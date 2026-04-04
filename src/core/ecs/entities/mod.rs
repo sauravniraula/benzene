@@ -1,1 +1,3 @@
-pub mod game_object;
+pub mod entity;
+
+pub use entity::Entity;

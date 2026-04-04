@@ -1,10 +1,13 @@
 use ash::vk::{self};
 
 use crate::{
-    core::gpu::{
-        materials_manager::MaterialsManager,
-        render_stage::geometry_and_lighting::{
-            GeometryLightingRenderStage, GeometryLightingRenderStageConfig,
+    core::{
+        assets::AssetStore,
+        gpu::{
+            materials_manager::MaterialsManager,
+            render_stage::geometry_and_lighting::{
+                GeometryLightingRenderStage, GeometryLightingRenderStageConfig,
+            },
         },
     },
     vulkan_backend::{
@@ -17,6 +20,7 @@ pub trait RecordableScene {
         &self,
         v_device: &VDevice,
         cmd: vk::CommandBuffer,
+        assets: &AssetStore,
         materials_m: &MaterialsManager,
         scene_r: &SceneRenderer,
     );
@@ -88,6 +92,7 @@ impl SceneRenderer {
     pub fn render(
         &self,
         v_device: &VDevice,
+        assets: &AssetStore,
         materials_manager: &MaterialsManager,
         ctx: &VFrameRenderContext,
         recordables: &[&dyn RecordableScene],
@@ -104,7 +109,7 @@ impl SceneRenderer {
         };
 
         for recordable in recordables.iter() {
-            recordable.record_scene(v_device, ctx.cmd, materials_manager, self);
+            recordable.record_scene(v_device, ctx.cmd, assets, materials_manager, self);
         }
 
         self.gl_rs.end(v_device, ctx);

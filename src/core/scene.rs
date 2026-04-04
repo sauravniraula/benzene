@@ -1,30 +1,32 @@
+use ash::vk;
+use nalgebra::Vector4;
+use std::{array::from_fn, mem::size_of};
+
 use crate::{
     core::{
+        assets::AssetStore,
         ecs::{
             components::{
-                Camera3D, Material3D, PointLight3D, Structure3D, Transform3D,
+                Camera3D, MeshRenderer, Name, PointLight3D, Transform3D,
                 directional_light_3d::DirectionalLight3D, spot_light_3d::SpotLight3D,
             },
-            entities::game_object::GameObject,
-            systems::{
-                camera_3d_compute_transform, camera_3d_handle_cm_event, camera_3d_handle_ki_event,
-                update_transform_3d_matrix,
-            },
+            entities::Entity,
+            resources::SceneResources,
+            systems::{camera_3d_apply_input, update_transform_3d_matrix},
             types::{CursorMovedEvent, KeyboardInputEvent},
+            world::World,
         },
         gpu::{
-            directional_light_uniform::DirectionalLightUniform,
+            directional_light_uniform::{DirectionalLightUniform, DirectionalLightUniformObject},
             global_uniform::GlobalUniform,
             materials_manager::MaterialsManager,
-            point_light_uniform::PointLightUniform,
+            point_light_uniform::{PointLightUniform, PointLightUniformObject},
             scene_render::{DrawableSceneElement, RecordableScene, SceneRenderer},
             shadow_mapping::ShadowMapping,
-            spot_light_uniform::SpotLightUniform,
-            texture::ImageTexture,
+            spot_light_uniform::{SpotLightUniform, SpotLightUniformObject},
         },
         model_push_constant::ModelPushConstant,
     },
-    shared::types::Id,
     vulkan_backend::{
         backend::VBackend,
         backend_event::VBackendEvent,
@@ -35,53 +37,30 @@ use crate::{
         device::VDevice,
     },
 };
-use ash::vk;
-use nalgebra::Vector4;
-use std::collections::HashMap;
-use std::mem::size_of;
 
 pub struct Scene {
     default_descriptor_pool: VDescriptorPool,
 
-    // Default Descriptor Sets
     pub global_uniform_set: VDescriptorSet,
     pub lights_set: VDescriptorSet,
+    pub world: World,
+    pub resources: SceneResources,
+    pub shadow_mapping: ShadowMapping,
 
-    // ECS
-    active_camera: Option<Id>,
     global_uniform: GlobalUniform,
     point_light_uniform: PointLightUniform,
     directional_light_uniform: DirectionalLightUniform,
     spot_light_uniform: SpotLightUniform,
-    entities: Vec<GameObject>,
-    transform_3d_components: HashMap<Id, Transform3D>,
-    camera_3d_components: HashMap<Id, Camera3D>,
-    point_light_3d_components: HashMap<Id, PointLight3D>,
-    directional_light_3d_components: HashMap<Id, DirectionalLight3D>,
-    spot_light_3d_components: HashMap<Id, SpotLight3D>,
-    structure_3d_components: HashMap<Id, Structure3D>,
-    material_3d_components: HashMap<Id, Material3D>,
 
-    // Defaults
-    texture: ImageTexture,
-
-    // Shadow Mapping
-    pub shadow_mapping: ShadowMapping,
-
-    // Status
     is_extent_dirty: bool,
     has_point_light_3d_changed: bool,
     has_directional_light_3d_changed: bool,
     has_spot_light_3d_changed: bool,
-
-    // Others
     current_extent: vk::Extent2D,
-    ambient_color: Vector4<f32>,
 }
 
 impl Scene {
     pub fn new(v_backend: &VBackend, scene_renderer: &SceneRenderer) -> Self {
-        // Default descriptor pool
         let default_descriptor_pool = VDescriptorPool::new(
             &v_backend.v_device,
             VDescriptorPoolConfig {
@@ -95,28 +74,26 @@ impl Scene {
                         count: 1,
                     },
                 ],
-                max_sets: 3 as u32,
+                max_sets: 3,
             },
         );
 
-        // Create default descriptor sets
         let global_uniform_set = VDescriptorSet::new(
             &v_backend.v_device,
             &default_descriptor_pool,
-            &scene_renderer.get_global_uniform_layout(),
+            scene_renderer.get_global_uniform_layout(),
         );
         let lights_set = VDescriptorSet::new(
             &v_backend.v_device,
             &default_descriptor_pool,
-            &scene_renderer.get_lights_uniform_layout(),
+            scene_renderer.get_lights_uniform_layout(),
         );
 
-        // Attaching to descriptor sets
         let global_uniform = GlobalUniform::new(v_backend, 1);
         let point_light_uniform = PointLightUniform::new(v_backend);
         let directional_light_uniform = DirectionalLightUniform::new(v_backend);
         let spot_light_uniform = SpotLightUniform::new(v_backend);
-        let texture = ImageTexture::empty(v_backend, vk::Format::R8G8B8A8_SRGB);
+
         {
             let mut batch = VDescriptorWriteBatch::new();
             global_uniform.queue_descriptor_writes(&global_uniform_set, &mut batch);
@@ -126,124 +103,105 @@ impl Scene {
             batch.flush(&v_backend.v_device);
         }
 
+        let resources = SceneResources::new(Vector4::new(0.1, 0.1, 0.1, 0.15));
+
         let mut scene = Self {
             default_descriptor_pool,
             global_uniform_set,
             lights_set,
-            active_camera: None,
+            world: World::new(),
+            resources,
+            shadow_mapping: ShadowMapping::new(),
             global_uniform,
             point_light_uniform,
             directional_light_uniform,
             spot_light_uniform,
-            entities: Vec::new(),
-            transform_3d_components: HashMap::new(),
-            camera_3d_components: HashMap::new(),
-            point_light_3d_components: HashMap::new(),
-            directional_light_3d_components: HashMap::new(),
-            spot_light_3d_components: HashMap::new(),
-            structure_3d_components: HashMap::new(),
-            material_3d_components: HashMap::new(),
-            texture,
-            shadow_mapping: ShadowMapping::new(),
             is_extent_dirty: false,
             has_point_light_3d_changed: false,
             has_directional_light_3d_changed: false,
             has_spot_light_3d_changed: false,
             current_extent: v_backend.v_swapchain.image_extent,
-            ambient_color: Vector4::new(0.1, 0.1, 0.1, 0.15),
         };
 
         scene
             .global_uniform
-            .update_ambient_color(v_backend, 0, &scene.ambient_color);
+            .update_ambient_color(v_backend, 0, &scene.resources.ambient_color);
 
         scene
     }
 
     pub fn handle_keyboard_input(&mut self, event: &KeyboardInputEvent) {
-        if let Some(active_id) = self.active_camera {
-            if let Some(camera) = self.camera_3d_components.get_mut(&active_id) {
-                camera_3d_handle_ki_event(camera, event);
-            }
-        }
+        self.resources.input.handle_keyboard_input(event);
     }
 
     pub fn handle_cursor_moved(&mut self, event: &CursorMovedEvent) {
-        if let Some(active_id) = self.active_camera {
-            if let Some(camera) = self.camera_3d_components.get_mut(&active_id) {
-                camera_3d_handle_cm_event(camera, event);
-            }
-        }
+        self.resources.input.handle_cursor_moved(event);
+    }
+
+    pub fn reset_cursor_tracking(&mut self) {
+        self.resources.input.reset_cursor_tracking();
     }
 
     pub fn handle_backend_event(&mut self, event: &VBackendEvent) {
-        match event {
-            VBackendEvent::UpdateFramebuffers(_, v_swapchain) => {
-                self.current_extent = v_swapchain.image_extent;
-                self.is_extent_dirty = true;
-            }
-            _ => (),
+        if let VBackendEvent::UpdateFramebuffers(_, v_swapchain) = event {
+            self.current_extent = v_swapchain.image_extent;
+            self.is_extent_dirty = true;
         }
     }
 
-    pub fn get_transform_3d_component(&mut self, entity: &GameObject) -> &mut Transform3D {
-        self.transform_3d_components
-            .get_mut(entity.get_id())
+    pub fn spawn_entity(&mut self) -> Entity {
+        self.world.spawn()
+    }
+
+    pub fn get_transform_3d_component(&mut self, entity: Entity) -> &mut Transform3D {
+        self.world
+            .transforms
+            .get_mut(&entity)
             .expect("failed to get transform 3d component from entity")
     }
 
-    pub fn add_game_object(&mut self, entity: GameObject) {
-        self.entities.push(entity);
+    pub fn add_name_component(&mut self, entity: Entity, name: Name) {
+        self.world.names.insert(entity, name);
     }
 
-    pub fn add_transform_3d_component(&mut self, entity: &GameObject, transform3d: Transform3D) {
-        self.transform_3d_components
-            .insert(*entity.get_id(), transform3d);
+    pub fn add_transform_3d_component(&mut self, entity: Entity, transform_3d: Transform3D) {
+        self.world.transforms.insert(entity, transform_3d);
     }
 
-    pub fn add_camera_3d_component(&mut self, entity: &GameObject, camera: Camera3D) {
-        let id = *entity.get_id();
-        self.camera_3d_components.insert(id, camera);
-        if self.active_camera.is_none() {
-            self.active_camera = Some(id);
+    pub fn add_camera_3d_component(&mut self, entity: Entity, camera: Camera3D) {
+        self.world.cameras.insert(entity, camera);
+        if self.resources.active_camera.is_none() {
+            self.resources.active_camera = Some(entity);
         }
     }
 
-    pub fn set_active_camera(&mut self, entity: &GameObject) {
-        self.active_camera = Some(*entity.get_id());
+    pub fn set_active_camera(&mut self, entity: Entity) {
+        self.resources.active_camera = Some(entity);
     }
 
-    pub fn add_point_light_3d_component(&mut self, entity: &GameObject, point_light: PointLight3D) {
-        let id = *entity.get_id();
-        self.point_light_3d_components.insert(id, point_light);
+    pub fn add_point_light_3d_component(&mut self, entity: Entity, point_light: PointLight3D) {
+        self.world.point_lights.insert(entity, point_light);
         self.has_point_light_3d_changed = true;
     }
 
     pub fn add_directional_light_3d_component(
         &mut self,
-        entity: &GameObject,
+        entity: Entity,
         directional_light: DirectionalLight3D,
     ) {
-        let id = *entity.get_id();
-        self.directional_light_3d_components
-            .insert(id, directional_light);
+        self.world
+            .directional_lights
+            .insert(entity, directional_light);
         self.has_directional_light_3d_changed = true;
     }
 
-    pub fn add_spot_light_3d_component(&mut self, entity: &GameObject, spot_light: SpotLight3D) {
-        let id = *entity.get_id();
-        self.spot_light_3d_components.insert(id, spot_light);
+    pub fn add_spot_light_3d_component(&mut self, entity: Entity, spot_light: SpotLight3D) {
+        self.world.spot_lights.insert(entity, spot_light);
         self.has_spot_light_3d_changed = true;
     }
 
-    pub fn add_structure_3d_component(&mut self, entity: &GameObject, structure: Structure3D) {
-        let id = *entity.get_id();
-        self.structure_3d_components.insert(id, structure);
-    }
-
-    pub fn add_material_3d_component(&mut self, entity: &GameObject, material: Material3D) {
-        let id = *entity.get_id();
-        self.material_3d_components.insert(id, material);
+    pub fn add_mesh_renderer_component(&mut self, entity: Entity, mesh_renderer: MeshRenderer) {
+        self.world.mesh_renderers.insert(entity, mesh_renderer);
     }
 
     pub fn mark_directional_light_3d_dirty(&mut self) {
@@ -253,136 +211,149 @@ impl Scene {
     pub fn pre_render(&mut self, v_backend: &VBackend, dt: f32) {
         self.update_global_uniform(v_backend, dt);
 
-        // Update dirty Transforms 3D and flag light uniform updates if any light moved
-        for (entity_id, t) in self.transform_3d_components.iter_mut() {
-            if t.dirty {
-                update_transform_3d_matrix(t);
-                if self.point_light_3d_components.contains_key(entity_id) {
+        for (entity, transform) in self.world.transforms.iter_mut() {
+            if transform.dirty {
+                update_transform_3d_matrix(transform);
+
+                if self.world.point_lights.contains_key(entity) {
                     self.has_point_light_3d_changed = true;
+                }
+                if self.world.directional_lights.contains_key(entity) {
+                    self.has_directional_light_3d_changed = true;
+                }
+                if self.world.spot_lights.contains_key(entity) {
+                    self.has_spot_light_3d_changed = true;
                 }
             }
         }
 
-        // Update point light uniform if needed
         self.update_point_light_uniform(v_backend);
-
-        // Update directional light uniform if needed
         self.update_directional_light_uniform(v_backend);
-
-        // Update spot light uniform if needed
         self.update_spot_light_uniform(v_backend);
     }
 
-    pub fn update_global_uniform(&mut self, v_backend: &VBackend, dt: f32) {
-        if let Some(active_camera_id) = self.active_camera {
-            let camera_3d = self
-                .camera_3d_components
-                .get_mut(&active_camera_id)
-                .expect("failed to get active camera from id");
-            if self.is_extent_dirty
-                || camera_3d.ki_events.len() > 0
-                || camera_3d.cm_events.len() > 0
-                || camera_3d.transform.dirty
-            {
-                camera_3d_compute_transform(camera_3d, dt);
-                let (view, projection) = camera_3d
-                    .transform
-                    .get_transform_3d_view_projection(self.current_extent);
-                camera_3d.transform.dirty = false;
-                self.global_uniform.update_view(v_backend, 0, &view);
-                self.global_uniform
-                    .update_projection(v_backend, 0, &projection);
-            }
+    fn update_global_uniform(&mut self, v_backend: &VBackend, dt: f32) {
+        let Some(active_camera) = self.resources.active_camera else {
+            return;
+        };
+
+        let Some(camera) = self.world.cameras.get(&active_camera) else {
+            return;
+        };
+
+        let transform = self
+            .world
+            .transforms
+            .get_mut(&active_camera)
+            .expect("active camera is missing a transform");
+
+        if self.is_extent_dirty
+            || self.resources.input.has_pending_camera_input()
+            || transform.dirty
+        {
+            camera_3d_apply_input(camera, transform, &mut self.resources.input, dt);
+
+            let (view, projection) =
+                transform.get_transform_3d_view_projection(self.current_extent);
+            self.global_uniform.update_view(v_backend, 0, &view);
+            self.global_uniform
+                .update_projection(v_backend, 0, &projection);
+            self.is_extent_dirty = false;
         }
     }
 
-    pub fn update_point_light_uniform(&mut self, v_backend: &VBackend) {
-        if self.has_point_light_3d_changed {
-            let mut index: usize = 0;
-            for (entity_id, point_light) in self.point_light_3d_components.iter() {
-                if index >= 16 {
-                    break;
-                }
-
-                if let Some(light_transform) = self.transform_3d_components.get(entity_id) {
-                    let p = light_transform.position;
-                    let point = Vector4::new(p.x, p.y, p.z, 1.0);
-                    self.point_light_uniform
-                        .update(v_backend, index, &point, &point_light.color);
-                }
-                index += 1;
-            }
-            self.has_point_light_3d_changed = false;
+    fn update_point_light_uniform(&mut self, v_backend: &VBackend) {
+        if !self.has_point_light_3d_changed {
+            return;
         }
+
+        let mut points = from_fn(|_| Vector4::new(0.0, 0.0, 0.0, 0.0));
+        let mut colors = from_fn(|_| Vector4::new(0.0, 0.0, 0.0, 0.0));
+
+        for (index, (entity, point_light)) in self.world.point_lights.iter().enumerate() {
+            if index >= 16 {
+                break;
+            }
+
+            if let Some(transform) = self.world.transforms.get(entity) {
+                let p = transform.position;
+                points[index] = Vector4::new(p.x, p.y, p.z, 1.0);
+                colors[index] = point_light.color;
+            }
+        }
+
+        let data = PointLightUniformObject { points, colors };
+        self.point_light_uniform.update_all(v_backend, &data);
+        self.has_point_light_3d_changed = false;
     }
 
-    pub fn update_directional_light_uniform(&mut self, v_backend: &VBackend) {
-        if self.has_directional_light_3d_changed {
-            let mut index: usize = 0;
-            for (entity_id, directional_light) in self.directional_light_3d_components.iter() {
-                if index >= 16 {
-                    break;
-                }
-
-                if let Some(light_transform) = self.transform_3d_components.get(entity_id) {
-                    let direction_raw = (light_transform.get_rotation3()
-                        * nalgebra::Vector3::new(0.0, 0.0, -1.0))
-                    .to_homogeneous();
-                    let direction =
-                        Vector4::new(direction_raw.x, direction_raw.y, direction_raw.z, 1.0);
-
-                    self.directional_light_uniform.update(
-                        v_backend,
-                        index,
-                        &direction,
-                        &directional_light.color,
-                    );
-                }
-                index += 1;
-            }
-            self.has_directional_light_3d_changed = false;
+    fn update_directional_light_uniform(&mut self, v_backend: &VBackend) {
+        if !self.has_directional_light_3d_changed {
+            return;
         }
+
+        let mut directions = from_fn(|_| Vector4::new(0.0, 0.0, 0.0, 0.0));
+        let mut colors = from_fn(|_| Vector4::new(0.0, 0.0, 0.0, 0.0));
+
+        for (index, (entity, light)) in self.world.directional_lights.iter().enumerate() {
+            if index >= 16 {
+                break;
+            }
+
+            if let Some(transform) = self.world.transforms.get(entity) {
+                let direction = transform.get_rotation3() * nalgebra::Vector3::new(0.0, 0.0, -1.0);
+                directions[index] = Vector4::new(direction.x, direction.y, direction.z, 1.0);
+                colors[index] = light.color;
+            }
+        }
+
+        let data = DirectionalLightUniformObject { directions, colors };
+        self.directional_light_uniform.update_all(v_backend, &data);
+        self.has_directional_light_3d_changed = false;
     }
 
-    pub fn update_spot_light_uniform(&mut self, v_backend: &VBackend) {
-        if self.has_spot_light_3d_changed {
-            let mut index: usize = 0;
-            for (entity_id, spot_light) in self.spot_light_3d_components.iter() {
-                if index >= 16 {
-                    break;
-                }
-
-                if let Some(light_transform) = self.transform_3d_components.get(entity_id) {
-                    let position = Vector4::new(
-                        light_transform.position.x,
-                        light_transform.position.y,
-                        light_transform.position.z,
-                        1.0,
-                    );
-                    self.spot_light_uniform.update(
-                        v_backend,
-                        index,
-                        &position,
-                        &(light_transform.get_rotation3() * nalgebra::Vector3::new(0.0, 0.0, -1.0))
-                            .to_homogeneous(),
-                        &spot_light.color,
-                    );
-                }
-                index += 1;
-            }
-            self.has_spot_light_3d_changed = false;
+    fn update_spot_light_uniform(&mut self, v_backend: &VBackend) {
+        if !self.has_spot_light_3d_changed {
+            return;
         }
+
+        let mut positions = from_fn(|_| Vector4::new(0.0, 0.0, 0.0, 0.0));
+        let mut directions = from_fn(|_| Vector4::new(0.0, 0.0, 0.0, 0.0));
+        let mut colors = from_fn(|_| Vector4::new(0.0, 0.0, 0.0, 0.0));
+
+        for (index, (entity, light)) in self.world.spot_lights.iter().enumerate() {
+            if index >= 16 {
+                break;
+            }
+
+            if let Some(transform) = self.world.transforms.get(entity) {
+                let direction = transform.get_rotation3() * nalgebra::Vector3::new(0.0, 0.0, -1.0);
+                positions[index] = Vector4::new(
+                    transform.position.x,
+                    transform.position.y,
+                    transform.position.z,
+                    1.0,
+                );
+                directions[index] = Vector4::new(direction.x, direction.y, direction.z, 0.0);
+                colors[index] = light.color;
+            }
+        }
+
+        let data = SpotLightUniformObject {
+            positions,
+            directions,
+            colors,
+        };
+        self.spot_light_uniform.update_all(v_backend, &data);
+        self.has_spot_light_3d_changed = false;
     }
 
-    pub fn destroy(&self, v_backend: &VBackend) {
+    pub fn destroy(&mut self, v_backend: &VBackend) {
         self.global_uniform.destroy(v_backend);
         self.point_light_uniform.destroy(v_backend);
         self.directional_light_uniform.destroy(v_backend);
         self.spot_light_uniform.destroy(v_backend);
-        for (_, structure_3d) in self.structure_3d_components.iter() {
-            structure_3d.destroy(v_backend);
-        }
-        self.texture.destroy(v_backend);
+        self.shadow_mapping.destroy(v_backend);
         self.default_descriptor_pool.destroy(&v_backend.v_device);
     }
 }
@@ -392,6 +363,7 @@ impl RecordableScene for Scene {
         &self,
         v_device: &VDevice,
         cmd: vk::CommandBuffer,
+        assets: &AssetStore,
         materials_m: &MaterialsManager,
         scene_r: &SceneRenderer,
     ) {
@@ -406,44 +378,48 @@ impl RecordableScene for Scene {
             );
         }
 
-        for (entity_id, structure_3d) in self.structure_3d_components.iter() {
-            if let Some(transform_3d) = self.transform_3d_components.get(entity_id) {
-                let material_3d_index = match self.material_3d_components.get(entity_id) {
-                    Some(material_3d) => material_3d.manager_index,
-                    None => 0,
-                };
+        for (entity, mesh_renderer) in self.world.mesh_renderers.iter() {
+            let Some(transform) = self.world.transforms.get(entity) else {
+                continue;
+            };
+            let Some(mesh) = assets.get_mesh(mesh_renderer.mesh) else {
+                continue;
+            };
 
-                unsafe {
-                    v_device.device.cmd_bind_descriptor_sets(
-                        cmd,
-                        vk::PipelineBindPoint::GRAPHICS,
-                        *scene_r.get_pipeline_layout(),
-                        2,
-                        &[materials_m.get_set_at(material_3d_index).set],
-                        &[],
-                    );
-                }
+            let material_handle = mesh_renderer.material.unwrap_or(assets.default_material);
 
-                let push = ModelPushConstant {
-                    transform: transform_3d.cached_transform,
-                };
-                let data = unsafe {
-                    std::slice::from_raw_parts(
-                        (&push as *const ModelPushConstant) as *const u8,
-                        size_of::<ModelPushConstant>(),
-                    )
-                };
-                unsafe {
-                    v_device.device.cmd_push_constants(
-                        cmd,
-                        *scene_r.get_pipeline_layout(),
-                        vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-                        0,
-                        data,
-                    );
-                }
-                structure_3d.model.draw(v_device, cmd);
+            unsafe {
+                v_device.device.cmd_bind_descriptor_sets(
+                    cmd,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    *scene_r.get_pipeline_layout(),
+                    2,
+                    &[materials_m.get_set_at(material_handle).set],
+                    &[],
+                );
             }
+
+            let push = ModelPushConstant {
+                transform: transform.cached_transform,
+            };
+            let data = unsafe {
+                std::slice::from_raw_parts(
+                    (&push as *const ModelPushConstant) as *const u8,
+                    size_of::<ModelPushConstant>(),
+                )
+            };
+
+            unsafe {
+                v_device.device.cmd_push_constants(
+                    cmd,
+                    *scene_r.get_pipeline_layout(),
+                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                    0,
+                    data,
+                );
+            }
+
+            mesh.draw(v_device, cmd);
         }
     }
 }

@@ -46,7 +46,7 @@ impl Transform3D {
         let aspect = (image_extent.width as f32).max(1.0) / (image_extent.height as f32).max(1.0);
         let fovy = std::f32::consts::FRAC_PI_3; // 60 degrees
         let znear = 0.1_f32;
-        let zfar = 100.0_f32;
+        let zfar = 10000.0_f32;
         let mut projection = Perspective3::new(aspect, fovy, znear, zfar).to_homogeneous();
         projection[(1, 1)] *= -1.0;
 

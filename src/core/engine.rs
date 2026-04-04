@@ -1,38 +1,32 @@
 use ash::vk;
 use std::time::Duration;
-use std::{collections::HashMap, time::Instant};
+use std::time::Instant;
 use winit::window::Window;
 
-use crate::core::ecs::entities::game_object::GameObject;
+use crate::core::ecs::entities::Entity;
 use crate::core::ecs::types::{CursorMovedEvent, KeyboardInputEvent};
+use crate::core::gpu::model::Model;
 use crate::core::gpu::scene_render::RecordableScene;
 use crate::log;
 use crate::vulkan_backend::backend_event::VBackendEvent;
 use crate::{
     core::{
-        ecs::components::{Material3D, Structure3D},
+        assets::{AssetStore, MaterialHandle, MeshHandle, TextureHandle},
         gpu::{
             materials_manager::MaterialsManager, scene_render::SceneRenderer, texture::ImageTexture,
         },
         scene::Scene,
-        utils::get_random_id,
     },
-    shared::types::Id,
     vulkan_backend::{
         backend::VBackend, descriptor::VDescriptorWriteBatch, frame::context::VFrameRenderContext,
     },
 };
 
 pub struct GameEngine {
-    // Core
     v_backend: VBackend,
     scene_renderer: SceneRenderer,
     materials_manager: MaterialsManager,
-
-    // Resources
-    textures: HashMap<Id, ImageTexture>,
-
-    // State
+    assets: AssetStore,
     active_scene: Option<Scene>,
     last_frame_instant: Instant,
     frame_count: usize,
@@ -50,7 +44,7 @@ impl GameEngine {
             v_backend,
             scene_renderer,
             materials_manager,
-            textures: HashMap::new(),
+            assets: AssetStore::new(),
             active_scene: None,
             last_frame_instant: Instant::now(),
             frame_count: 0,
@@ -59,27 +53,34 @@ impl GameEngine {
         };
 
         engine.init();
-
         engine
     }
 
-    pub fn init(&mut self) {
+    fn init(&mut self) {
         let default_texture = ImageTexture::empty(&self.v_backend, vk::Format::R8G8B8A8_SRGB);
-        let default_texture_id = get_random_id();
-        self.textures.insert(default_texture_id, default_texture);
+        let default_texture_handle = self.assets.insert_texture(default_texture);
         let sampler_layout = self.scene_renderer.get_image_sampler_layout();
-        let default_material_index = self
+        let default_material = self
             .materials_manager
             .allocate_material(&self.v_backend.v_device, sampler_layout);
-        let default_material = Material3D {
-            manager_index: default_material_index,
-        };
+        self.assets.default_material = default_material;
+
+        let texture = self
+            .assets
+            .get_texture(default_texture_handle)
+            .expect("default texture should exist");
+
         let mut batch_writer = VDescriptorWriteBatch::new();
-        default_material.queue_descriptor_writes(
-            &mut self.materials_manager,
-            &self.textures[&default_texture_id],
-            &mut batch_writer,
-        );
+        self.materials_manager
+            .get_set_at(default_material)
+            .queue_image(
+                &mut batch_writer,
+                vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                0,
+                &texture.image_view,
+                &texture.sampler,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            );
         batch_writer.flush(&self.v_backend.v_device);
     }
 
@@ -88,86 +89,61 @@ impl GameEngine {
     }
 
     pub fn get_active_scene(&mut self) -> &mut Scene {
-        self.active_scene.as_mut().unwrap()
+        self.active_scene.as_mut().expect("no active scene")
     }
 
     pub fn set_active_scene(&mut self, scene: Scene) {
         self.active_scene = Some(scene);
     }
 
-    pub fn enable_shadow_for_spot_light_3d(&mut self, entity: &GameObject) {
+    pub fn enable_shadow_for_spot_light_3d(&mut self, entity: Entity) {
+        let scene = self.active_scene.as_mut().expect("No active scene");
+        scene.shadow_mapping.add_spot_light(&self.v_backend, entity);
+    }
+
+    pub fn disable_shadow_for_spot_light_3d(&mut self, entity: Entity) {
         let scene = self.active_scene.as_mut().expect("No active scene");
         scene
             .shadow_mapping
-            .add_spot_light(&self.v_backend, *entity.get_id());
-
-        let _shadow_map = scene
-            .shadow_mapping
-            .spot_light_maps
-            .get(entity.get_id())
-            .unwrap();
-        let _shadow_map_view = scene
-            .shadow_mapping
-            .spot_light_views
-            .get(entity.get_id())
-            .unwrap();
-
-        // self.scene_render.v_shadow_rendering_system.add_framebuffer(
-        //     &self.v_backend.v_device,
-        //     *entity.get_id(),
-        //     None,
-        //     Some(shadow_map_view),
-        //     shadow_map.config.get_extent_2d(),
-        //     true,
-        //     true,
-        // );
+            .remove_spot_light(&self.v_backend, &entity);
     }
 
-    pub fn disable_shadow_for_spot_light_3d(&mut self, entity: &GameObject) {
-        let scene = self.active_scene.as_mut().expect("No active scene");
-        scene
-            .shadow_mapping
-            .remove_spot_light(&self.v_backend, entity.get_id());
-        // self.scene_render
-        //     .v_shadow_rendering_system
-        //     .remove_framebuffer(&self.v_backend.v_device, entity.get_id());
+    pub fn load_mesh_from_obj(&mut self, obj_path: &str) -> MeshHandle {
+        let mesh = Model::from_obj(&self.v_backend, obj_path);
+        self.assets.insert_mesh(mesh)
     }
 
-    pub fn get_structure_3d_from_obj(&self, obj_path: &str) -> Structure3D {
-        Structure3D::from_obj(&self.v_backend, obj_path)
-    }
-
-    pub fn load_texture_from_image(&mut self, image_path: &str) -> Id {
+    pub fn load_texture_from_image(&mut self, image_path: &str) -> TextureHandle {
         let texture = ImageTexture::new(&self.v_backend, image_path, vk::Format::R8G8B8A8_SRGB);
-        let id = get_random_id();
-        self.textures.insert(id, texture);
-        id
+        self.assets.insert_texture(texture)
     }
 
-    pub fn get_material_3d_from_texture(&mut self, texture: Id) -> Material3D {
+    pub fn create_material_from_texture(&mut self, texture: TextureHandle) -> MaterialHandle {
         let texture = self
-            .textures
-            .get(&texture)
-            .expect("invalid texture id passed to get_material_3d_from_texture");
+            .assets
+            .get_texture(texture)
+            .expect("invalid texture handle passed to create_material_from_texture");
         let sampler_layout = self.scene_renderer.get_image_sampler_layout();
-        let allocated_sets_index = self
+        let material = self
             .materials_manager
             .allocate_material(&self.v_backend.v_device, sampler_layout);
 
         let mut batch_writer = VDescriptorWriteBatch::new();
-
-        let material = Material3D {
-            manager_index: allocated_sets_index,
-        };
-
-        material.queue_descriptor_writes(&mut self.materials_manager, texture, &mut batch_writer);
+        self.materials_manager.get_set_at(material).queue_image(
+            &mut batch_writer,
+            vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            0,
+            &texture.image_view,
+            &texture.sampler,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        );
         batch_writer.flush(&self.v_backend.v_device);
         material
     }
 
-    pub fn unload_texture(&mut self, texture: Id) {
-        if let Some(tex) = self.textures.remove(&texture) {
-            tex.destroy(&self.v_backend);
+    pub fn unload_texture(&mut self, texture: TextureHandle) {
+        if let Some(texture) = self.assets.remove_texture(texture) {
+            texture.destroy(&self.v_backend);
         }
     }
 
@@ -195,6 +171,12 @@ impl GameEngine {
         }
     }
 
+    pub fn reset_cursor_tracking(&mut self) {
+        if let Some(scene) = &mut self.active_scene {
+            scene.reset_cursor_tracking();
+        }
+    }
+
     pub fn pre_render(&mut self) {
         log!("Game Engine pre render");
 
@@ -202,36 +184,29 @@ impl GameEngine {
         let dt = current_instant.duration_since(self.last_frame_instant);
         self.last_frame_instant = current_instant;
 
-        // Frame Count and FPS
         self.fps = (1.0 / dt.as_secs_f64()) as usize;
         self.frame_count += 1;
         self.frame_time = dt;
         log!(format!("FPS: {}", self.fps));
 
-        // Pre-render the scene
         if let Some(scene) = &mut self.active_scene {
             scene.pre_render(&self.v_backend, dt.as_secs_f32());
         }
     }
 
     pub fn render(&mut self, window: &Window) {
-        // render
         log!("Game Engine render");
 
         let render_result = self.v_backend.render(|info| self.render_scene(&info));
 
-        // check render result
         if let Some(event) = self.v_backend.check_render_issues(window, render_result) {
             self.scene_renderer.handle_backend_event(&event);
             if let Some(scene) = &mut self.active_scene {
                 scene.handle_backend_event(&event);
             }
 
-            match event {
-                VBackendEvent::UpdateFramebuffers(..) => {
-                    log!("Update framebuffer, frame: {}", self.frame_count);
-                }
-                _ => (),
+            if let VBackendEvent::UpdateFramebuffers(..) = event {
+                log!("Update framebuffer, frame: {}", self.frame_count);
             }
         }
     }
@@ -242,6 +217,7 @@ impl GameEngine {
             let recordables: [&dyn RecordableScene; 1] = [scene];
             self.scene_renderer.render(
                 &self.v_backend.v_device,
+                &self.assets,
                 &self.materials_manager,
                 ctx,
                 &recordables,
@@ -254,13 +230,10 @@ impl GameEngine {
 
     pub fn destroy(mut self) {
         self.v_backend.v_device.wait_till_idle();
-        if let Some(scene) = &self.active_scene {
+        if let Some(scene) = &mut self.active_scene {
             scene.destroy(&self.v_backend);
         }
-        // Destroy all engine-owned textures
-        for (_, tex) in self.textures.drain() {
-            tex.destroy(&self.v_backend);
-        }
+        self.assets.destroy(&self.v_backend);
         self.scene_renderer.destroy(&self.v_backend.v_device);
         self.materials_manager.destroy(&self.v_backend.v_device);
         self.v_backend.destroy();
