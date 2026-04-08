@@ -1,137 +1,99 @@
 ## Benzene
 
-Rust Vulkan game engine for simple real‑time rendering. Minimal surface area, ergonomic scene API, and GLFW windowing.
+Rust Vulkan rendering engine with a domain-first layout:
+- `scene`: ECS scene data, bundles, and input-driven simulation
+- `assets`: meshes, textures, materials, and typed asset IDs
+- `render`: renderer, frame resources, and Vulkan internals
+- `engine`: high-level entrypoint that ties assets and rendering together
+
+The old `core` / `vulkan_backend` split and thin `V*` wrapper surface are no longer the public architecture. Renderer internals now use `ash::Instance`, `ash::Device`, and raw `vk::*` handles directly.
 
 ### Highlights
-- **Vulkan via ash**: explicit, modern graphics
-- **GLFW windowing**: cross‑platform surface + event loop
-- **Scene + ECS**: add entities and components (camera, lights, transforms, structures)
-- **Models**: load `.obj` files as `Structure3D`
-- **Modular**: clear split between engine and Vulkan backend
+- Vulkan via `ash`
+- `winit` windowing and event loop integration
+- ECS scene with typed bundles such as `CameraBundle` and `MeshInstanceBundle`
+- Typed asset IDs for meshes, textures, and materials
+- Material binding driven by real `Texture` / `Material` resources instead of generic handle wrappers
 
 ### Requirements
-- Rust (stable)
-- Vulkan runtime/driver installed
-- Linux/Windows with a Vulkan‑capable GPU
- - Optional (for shader rebuilds): Vulkan SDK providing `glslc` or `shaderc-tools`
+- Rust stable
+- Vulkan runtime / graphics driver
+- Linux or Windows with Vulkan-capable GPU
+- Optional for shader rebuilds: `glslc` or `shaderc-tools`
 
-### Install
-Use in your workspace (path or git), or build/run this repo directly.
-
-```toml
-[dependencies]
-# Local path (same workspace/monorepo)
-benzene = { path = "../benzene" }
-
-# Or from a git repo (example)
-# benzene = { git = "https://github.com/<you>/benzene", tag = "v0.1.0" }
-```
-
-### Usage
-Create an engine and scene, add entities and components, then run:
-
+### Minimal Usage
 ```rust
-use benzene::core::GameEngine;
-use benzene::core::ecs::{
-    components::{Camera3D, PointLight3D, Structure3D, Transform3D},
-    entities::game_object::GameObject,
+use benzene::{
+    Camera, CameraBundle, DirectionalLight, DirectionalLightBundle, Engine, MeshInstance,
+    MeshInstanceBundle, Scene, Transform,
 };
 use nalgebra::{Vector3, Vector4};
 
-fn main() {
-    let mut engine = GameEngine::new();
+fn build_scene(engine: &mut Engine) -> benzene::Result<Scene> {
     let mut scene = engine.create_scene();
 
-    // Camera
-    let camera = GameObject::new("Camera");
-    scene.add_game_object(camera.clone());
-    scene.add_camera_3d_component(&camera, Camera3D::new_default());
-    scene.set_active_camera(&camera);
+    let texture = engine.load_texture("assets/textures/cracked-dirt512x512.jpg")?;
+    let material = engine.create_material(texture)?;
+    let mesh = engine.load_mesh_obj("assets/models/plane.obj")?;
 
-    // Point light
-    let light = GameObject::new("Light");
-    scene.add_game_object(light.clone());
-    scene.add_transform_3d_component(
-        &light,
-        Transform3D::new(
-            Vector3::new(2.0, 2.0, 0.0),
-            Vector3::new(0.0, 0.0, 0.0),
-            Vector3::new(1.0, 1.0, 1.0),
-        ),
+    let camera = scene.spawn_camera(
+        CameraBundle::new(
+            Transform::new(
+                Vector3::new(0.0, 2.8, 6.5),
+                Vector3::new((-12.0f32).to_radians(), 0.0, 0.0),
+                Vector3::new(1.0, 1.0, 1.0),
+            ),
+            Camera::default(),
+        )
+        .named("Camera"),
     );
-    scene.add_point_light_3d_component(&light, PointLight3D::new(Vector4::new(1.0, 1.0, 1.0, 10.0)));
+    scene.set_active_camera(camera);
 
-    // Model from .obj
-    let vase_entity = GameObject::new("Vase");
-    let vase: Structure3D = engine.get_structure_from_obj("assets/models/vase-smooth.obj");
-    scene.add_game_object(vase_entity.clone());
-    scene.add_transform_3d_component(
-        &vase_entity,
-        Transform3D::new(
-            Vector3::new(0.0, 0.0, -5.0),
-            Vector3::new(0.0, 0.0, 0.0),
-            Vector3::new(1.0, 1.0, 1.0),
-        ),
+    scene.spawn_directional_light(
+        DirectionalLightBundle::new(
+            Transform::identity(),
+            DirectionalLight::new(Vector4::new(1.0, 1.0, 1.0, 0.2)),
+        )
+        .named("Sun"),
     );
-    scene.add_structure_3d_component(&vase_entity, vase);
 
-    engine.set_active_scene(scene);
-    engine.run();
-    engine.destroy();
+    scene.spawn_mesh_instance(
+        MeshInstanceBundle::new(
+            Transform::new(
+                Vector3::new(0.0, 0.0, -5.0),
+                Vector3::zeros(),
+                Vector3::new(4.0, 1.0, 4.0),
+            ),
+            MeshInstance::new(mesh, Some(material)),
+        )
+        .named("Ground"),
+    );
+
+    Ok(scene)
 }
 ```
 
-### Controls (defaults)
-- **W/A/S/D**: move left/right/back/forward
-- **Space**: move up
-- **Alt**: move down
-- **Arrow keys**: look around (yaw/pitch)
-- **Esc**: quit
+See [src/main.rs](/home/viristo/prog/benzene/src/main.rs) for the full `winit` sample app.
 
-### Public API surface (essentials)
-- **Engine**
-  - `GameEngine::new()`
-  - `GameEngine::create_scene()` → `Scene`
-  - `GameEngine::set_active_scene(Scene)`
-  - `GameEngine::run()` / `GameEngine::destroy()`
-  - `GameEngine::get_structure_from_obj(path)` → `Structure3D`
-- **Scene**
-  - `Scene::add_game_object(GameObject)`
-  - `Scene::add_transform_3d_component(&GameObject, Transform3D)`
-  - `Scene::add_camera_3d_component(&GameObject, Camera3D)` / `Scene::set_active_camera(&GameObject)`
-  - `Scene::add_point_light_3d_component(&GameObject, PointLight3D)`
-  - `Scene::add_structure_3d_component(&GameObject, Structure3D)`
-- **GameObject**
-  - lightweight entity handle (ID + name); attach components via `Scene`
-
-### Assets
-- `.obj` meshes are supported via `tobj`. Provide paths relative to your app.
-- A default texture is bound; per‑object materials are a work‑in‑progress.
+### Project Layout
+```text
+src/
+├── assets/      # Mesh / texture / material resources and typed IDs
+├── render/      # Renderer and Vulkan internals
+├── scene/       # ECS scene model, bundles, input helpers
+├── engine.rs    # High-level engine entrypoint
+└── main.rs      # Sample application
+```
 
 ### Run
 ```bash
-cargo run --release
+cargo run
 ```
 
 ### Shaders
-Compiled SPIR‑V shaders are output to `compiled/shaders/` mirroring the layout of `assets/shaders/`. If you edit GLSL source, rebuild:
+Compiled SPIR-V shaders are expected under `compiled/shaders/`, mirroring `assets/shaders/`.
 
+If you edit GLSL source, rebuild them with:
 ```bash
 ./compile_shaders.sh
 ```
-
-### Project layout
-```
-benzene/
-├── assets/               # sample assets, shaders, textures
-├── src/
-│   ├── core/             # engine, scene, ecs, gpu helpers
-│   ├── vulkan_backend/   # instance/device/swapchain/pipeline/rendering
-│   ├── window/           # window config + wrapper
-│   └── shared/           # helpers (e.g., file I/O)
-└── Cargo.toml
-```
-
-### Troubleshooting
-- If the Vulkan loader/device fails to initialize, update GPU drivers and ensure the Vulkan loader is installed.
-- Use `--release` for stable frame times.
