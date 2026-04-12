@@ -1,19 +1,21 @@
 use std::{
-    ffi::CString,
+    ffi::{CStr, CString, c_void},
     sync::{Arc, Mutex},
 };
 
-use ash::{Device, Instance, khr, vk};
+use ash::{Device, Instance, ext::debug_utils, khr, vk};
 use winit::{
     raw_window_handle::HasDisplayHandle, raw_window_handle::HasWindowHandle, window::Window,
 };
 
 use crate::{
-    constants::MAX_FRAMES_IN_FLIGHT,
+    constants::{DEBUG, MAX_FRAMES_IN_FLIGHT},
     error::{EngineError, Result},
     shared::load_file_as_vec_u32,
     utils::compiled_spirv_path_for_source,
 };
+
+const VALIDATION_LAYER_NAME: &CStr = c"VK_LAYER_KHRONOS_validation";
 
 #[derive(Clone, Copy)]
 struct QueueFamilies {
@@ -56,6 +58,8 @@ pub(crate) struct VContext {
     surface_loader: khr::surface::Instance,
     surface: vk::SurfaceKHR,
     swapchain_loader: khr::swapchain::Device,
+    debug_utils_loader: Option<debug_utils::Instance>,
+    debug_messenger: Option<vk::DebugUtilsMessengerEXT>,
     depth_format: vk::Format,
     state: Mutex<RuntimeState>,
 }
@@ -63,6 +67,7 @@ pub(crate) struct VContext {
 impl VContext {
     pub fn new(window: &Window) -> Result<Arc<Self>> {
         let entry = ash::Entry::linked();
+        let validation_enabled = DEBUG;
 
         let app_name = CString::new("benzene").expect("static app name should be valid");
         let app_info = vk::ApplicationInfo::default()
@@ -70,19 +75,49 @@ impl VContext {
             .engine_name(&app_name)
             .api_version(vk::make_api_version(0, 1, 0, 0));
 
-        let extension_names =
+        if validation_enabled {
+            ensure_validation_layer_support(&entry)?;
+        }
+
+        let mut extension_names =
             ash_window::enumerate_required_extensions(window.display_handle().unwrap().as_raw())
                 .map_err(|result| {
                     EngineError::vk("enumerating required instance extensions", result)
-                })?;
-        let create_info = vk::InstanceCreateInfo::default()
+                })?
+                .to_vec();
+        if validation_enabled {
+            extension_names.push(debug_utils::NAME.as_ptr());
+        }
+
+        let layer_names = if validation_enabled {
+            vec![VALIDATION_LAYER_NAME.as_ptr()]
+        } else {
+            Vec::new()
+        };
+        let mut debug_messenger_info = debug_messenger_create_info();
+        let mut create_info = vk::InstanceCreateInfo::default()
             .application_info(&app_info)
-            .enabled_extension_names(extension_names);
+            .enabled_extension_names(&extension_names)
+            .enabled_layer_names(&layer_names);
+        if validation_enabled {
+            create_info = create_info.push_next(&mut debug_messenger_info);
+        }
 
         let instance = unsafe {
             entry
                 .create_instance(&create_info, None)
                 .map_err(|result| EngineError::vk("creating instance", result))?
+        };
+        let (debug_utils_loader, debug_messenger) = if validation_enabled {
+            let debug_utils_loader = debug_utils::Instance::new(&entry, &instance);
+            let debug_messenger = unsafe {
+                debug_utils_loader
+                    .create_debug_utils_messenger(&debug_messenger_create_info(), None)
+                    .map_err(|result| EngineError::vk("creating debug messenger", result))?
+            };
+            (Some(debug_utils_loader), Some(debug_messenger))
+        } else {
+            (None, None)
         };
 
         let surface = unsafe {
@@ -199,6 +234,8 @@ impl VContext {
             surface_loader,
             surface,
             swapchain_loader,
+            debug_utils_loader,
+            debug_messenger,
             depth_format,
             state: Mutex::new(RuntimeState {
                 swapchain: vk::SwapchainKHR::null(),
@@ -222,6 +259,10 @@ impl VContext {
 
     pub fn device(&self) -> &Device {
         &self.device
+    }
+
+    pub fn upload_command_pool(&self) -> vk::CommandPool {
+        self.upload_command_pool
     }
 
     pub fn depth_format(&self) -> vk::Format {
@@ -612,9 +653,15 @@ impl VContext {
             image_count = capabilities.max_image_count;
         }
 
+        let old_swapchain = self
+            .state
+            .lock()
+            .expect("vulkan context mutex poisoned")
+            .swapchain;
         let queue_family_indices = [self.graphics_queue_family, self.present_queue_family];
         let mut create_info = vk::SwapchainCreateInfoKHR::default()
             .surface(self.surface)
+            .old_swapchain(old_swapchain)
             .min_image_count(image_count)
             .image_format(surface_format.format)
             .image_color_space(surface_format.color_space)
@@ -821,12 +868,73 @@ impl Drop for VContext {
             drop(state);
 
             self.surface_loader.destroy_surface(self.surface, None);
+            if let (Some(debug_utils_loader), Some(debug_messenger)) =
+                (&self.debug_utils_loader, self.debug_messenger)
+            {
+                debug_utils_loader.destroy_debug_utils_messenger(debug_messenger, None);
+            }
             self.device
                 .destroy_command_pool(self.upload_command_pool, None);
             self.device.destroy_device(None);
             self.instance.destroy_instance(None);
         }
     }
+}
+
+fn ensure_validation_layer_support(entry: &ash::Entry) -> Result<()> {
+    let available_layers = unsafe {
+        entry
+            .enumerate_instance_layer_properties()
+            .map_err(|result| EngineError::vk("enumerating instance layers", result))?
+    };
+    let has_validation_layer = available_layers
+        .iter()
+        .any(|layer| layer.layer_name_as_c_str() == Ok(VALIDATION_LAYER_NAME));
+
+    if has_validation_layer {
+        Ok(())
+    } else {
+        Err(EngineError::Message(
+            "validation layer `VK_LAYER_KHRONOS_validation` is not available".into(),
+        ))
+    }
+}
+
+fn debug_messenger_create_info() -> vk::DebugUtilsMessengerCreateInfoEXT<'static> {
+    vk::DebugUtilsMessengerCreateInfoEXT::default()
+        .message_severity(
+            vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
+                | vk::DebugUtilsMessageSeverityFlagsEXT::INFO,
+        )
+        .message_type(
+            vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+                | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
+                | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
+        )
+        .pfn_user_callback(Some(vulkan_debug_callback))
+}
+
+unsafe extern "system" fn vulkan_debug_callback(
+    message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
+    message_type: vk::DebugUtilsMessageTypeFlagsEXT,
+    callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT<'_>,
+    _user_data: *mut c_void,
+) -> vk::Bool32 {
+    let message = if callback_data.is_null() {
+        "<null debug callback data>"
+    } else {
+        unsafe { CStr::from_ptr((*callback_data).p_message) }
+            .to_str()
+            .unwrap_or("<invalid utf-8 debug message>")
+    };
+
+    eprintln!(
+        "[Vulkan][{:?}][{:?}] {}",
+        message_severity, message_type, message
+    );
+
+    vk::FALSE
 }
 
 fn transition_image_layout(

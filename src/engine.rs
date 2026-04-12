@@ -5,6 +5,7 @@ use crate::{
     error::Result,
     render::Renderer,
     scene::Scene,
+    ui::EguiFrame,
 };
 
 pub struct Engine {
@@ -25,6 +26,11 @@ impl Engine {
 
     pub fn render(&mut self, scene: &Scene) -> Result<()> {
         self.renderer.render(scene, &self.assets)
+    }
+
+    pub fn render_with_egui(&mut self, scene: &Scene, egui_frame: &EguiFrame) -> Result<()> {
+        self.renderer
+            .render_with_egui(scene, &self.assets, egui_frame)
     }
 
     pub fn resize(&mut self, window: &Window) -> Result<()> {

@@ -5,6 +5,7 @@ pub mod error;
 pub mod render;
 pub mod scene;
 pub mod shared;
+pub mod ui;
 pub mod utils;
 
 pub use assets::{AssetManager, MaterialId, MeshId, TextureId};
@@ -13,5 +14,6 @@ pub use error::{EngineError, Result};
 pub use scene::{
     Camera, CameraBundle, DirectionalLight, DirectionalLightBundle, Entity, FrameInput, InputState,
     MeshInstance, MeshInstanceBundle, Name, PointLight, PointLightBundle, Scene, SpotLight,
-    SpotLightBundle, Transform,
+    SpotLightBundle, Transform, Visibility,
 };
+pub use ui::{EguiFrame, EguiLayer, SceneViewport};

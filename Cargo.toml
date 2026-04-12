@@ -7,6 +7,9 @@ edition = "2024"
 ash = { version = "0.38.0", features = ["linked"] }
 ash-window = "0.13.0"
 winit = "0.30.12"
+egui = "0.33.3"
+egui-winit = { version = "0.33.3", default-features = false }
+egui-ash-renderer = "0.11.0"
 image = "0.25.6"
 memoffset = "0.9.1"
 nalgebra = "0.34.0"

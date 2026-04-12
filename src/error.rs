@@ -28,6 +28,8 @@ pub enum EngineError {
         #[source]
         source: tobj::LoadError,
     },
+    #[error("egui renderer failure: {0}")]
+    EguiRenderer(#[from] egui_ash_renderer::RendererError),
     #[error("no compatible vulkan physical device found")]
     NoCompatibleDevice,
     #[error("window extent is zero")]
