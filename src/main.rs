@@ -1,5 +1,5 @@
-mod app;
+use benzene::app;
 
-fn main() {
-    app::run();
+pub fn main() {
+    let _app = app::App::new(); 
 }
