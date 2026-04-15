@@ -1,6 +1,10 @@
-use std::ffi::CStr;
+use std::{ffi::CStr, sync::Arc};
 
-use crate::{log, log_info, vcontext::Vcontext};
+use crate::{
+    log, log_info,
+    render_loop::{self, RenderLoop},
+    vcontext::Vcontext,
+};
 use ash_window;
 use winit::{
     self,
@@ -9,7 +13,8 @@ use winit::{
 
 pub struct App {
     window: Option<winit::window::Window>,
-    vcontext: Option<Vcontext>,
+    vcontext: Option<Arc<Vcontext>>,
+    render_loop: Option<RenderLoop>,
 }
 
 impl App {
@@ -18,6 +23,7 @@ impl App {
         let mut app = Self {
             window: None,
             vcontext: None,
+            render_loop: None,
         };
         event_loop
             .run_app(&mut app)
@@ -45,13 +51,17 @@ impl winit::application::ApplicationHandler for App {
                 .collect();
         log_info!("Required window extensions: {:?}", required_extensions);
 
-        self.vcontext = Some(Vcontext::new(
+        let vcontext = Arc::new(Vcontext::new(
             required_extensions,
             vec![],
             display_handle,
             window_handle,
         ));
+
+        self.render_loop = Some(RenderLoop::new(vcontext.clone()));
+
         self.window = Some(window);
+        self.vcontext = Some(vcontext);
     }
 
     fn window_event(
@@ -63,6 +73,11 @@ impl winit::application::ApplicationHandler for App {
         match event {
             winit::event::WindowEvent::CloseRequested => {
                 event_loop.exit();
+            }
+            winit::event::WindowEvent::RedrawRequested => {
+                // if let Some(render_loop) = &self.render_loop {
+                //     render_loop.draw();
+                // }
             }
             _ => (),
         }

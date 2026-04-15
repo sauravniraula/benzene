@@ -1,12 +1,13 @@
-use std::ffi::CStr;
+use std::{cell::Cell, ffi::CStr};
 
 use ash;
 use ash_window;
 use winit;
 
 use crate::{
-    constants::{SHADER_OUTPUT_DIR, SHADER_SOURCE_DIR},
+    images::create_image_views,
     log_info,
+    shaders::{compiled_spirv_path_for_source, load_file_as_vec_u32},
 };
 
 unsafe extern "system" fn vulkan_debug_callback(
@@ -25,7 +26,32 @@ unsafe extern "system" fn vulkan_debug_callback(
     ash::vk::FALSE
 }
 
-pub struct Vcontext {}
+pub struct Vcontext {
+    pub instance: ash::Instance,
+    pub debug_utils_loader: ash::ext::debug_utils::Instance,
+    pub debug_messenger: ash::vk::DebugUtilsMessengerEXT,
+    pub surface_instance: ash::khr::surface::Instance,
+    pub surface: ash::vk::SurfaceKHR,
+    pub physical_device: ash::vk::PhysicalDevice,
+    pub device: ash::Device,
+    pub graphics_queue_index: u32,
+    pub compute_queue_index: u32,
+    pub transfer_queue_index: u32,
+    pub graphics_queue: ash::vk::Queue,
+    pub compute_queue: ash::vk::Queue,
+    pub transfer_queue: ash::vk::Queue,
+    pub surface_format: ash::vk::SurfaceFormatKHR,
+    pub present_mode: ash::vk::PresentModeKHR,
+    pub surface_extent: ash::vk::Extent2D,
+    pub current_transform: ash::vk::SurfaceTransformFlagsKHR,
+    pub image_count: u32,
+    pub swapchain_device: ash::khr::swapchain::Device,
+    pub swapchain: ash::vk::SwapchainKHR,
+    pub swapchain_images: Vec<ash::vk::Image>,
+    pub swapchain_image_views: Vec<ash::vk::ImageView>,
+    pub pipeline_layout: ash::vk::PipelineLayout,
+    pub pipeline: ash::vk::Pipeline,
+}
 
 impl Vcontext {
     pub fn new(
@@ -69,7 +95,7 @@ impl Vcontext {
             .pfn_user_callback(Some(vulkan_debug_callback));
 
         let debug_utils_loader = ash::ext::debug_utils::Instance::new(&entry, &instance);
-        unsafe {
+        let debug_messenger = unsafe {
             debug_utils_loader
                 .create_debug_utils_messenger(&debug_info, None)
                 .unwrap()
@@ -129,9 +155,56 @@ impl Vcontext {
                 .aspect_mask(ash::vk::ImageAspectFlags::COLOR),
         );
 
-        let pipeline = create_graphics_pipeline(&device, surface_format);
+        let (pipeline_layout, pipeline) = create_graphics_pipeline(&device, surface_format);
 
-        Self {}
+        Self {
+            instance,
+            debug_utils_loader,
+            debug_messenger,
+            surface_instance,
+            surface,
+            physical_device,
+            device,
+            graphics_queue_index,
+            compute_queue_index,
+            transfer_queue_index,
+            graphics_queue,
+            compute_queue,
+            transfer_queue,
+            surface_format,
+            present_mode,
+            surface_extent,
+            current_transform,
+            image_count,
+            swapchain_device,
+            swapchain,
+            swapchain_images,
+            swapchain_image_views,
+            pipeline_layout,
+            pipeline,
+        }
+    }
+
+    pub fn destory(&mut self) {
+        unsafe {
+            let _ = self.device.device_wait_idle();
+
+            self.device.destroy_pipeline(self.pipeline, None);
+            self.device
+                .destroy_pipeline_layout(self.pipeline_layout, None);
+
+            for &image_view in &self.swapchain_image_views {
+                self.device.destroy_image_view(image_view, None);
+            }
+
+            self.swapchain_device
+                .destroy_swapchain(self.swapchain, None);
+            self.device.destroy_device(None);
+            self.surface_instance.destroy_surface(self.surface, None);
+            self.debug_utils_loader
+                .destroy_debug_utils_messenger(self.debug_messenger, None);
+            self.instance.destroy_instance(None);
+        }
     }
 }
 
@@ -194,7 +267,9 @@ fn pick_physical_device(
             instance.get_physical_device_features2(each, &mut features2);
         }
 
-        if vk13.dynamic_rendering == ash::vk::FALSE || eds.extended_dynamic_state == ash::vk::FALSE
+        if vk13.dynamic_rendering == ash::vk::FALSE
+            || eds.extended_dynamic_state == ash::vk::FALSE
+            || vk13.synchronization2 == ash::vk::FALSE
         {
             score = -1;
         }
@@ -294,7 +369,9 @@ fn create_logical_device(
         );
     }
 
-    let mut vk13 = ash::vk::PhysicalDeviceVulkan13Features::default().dynamic_rendering(true);
+    let mut vk13 = ash::vk::PhysicalDeviceVulkan13Features::default()
+        .dynamic_rendering(true)
+        .synchronization2(true);
     let mut eds = ash::vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT::default()
         .extended_dynamic_state(true);
     let mut features2 = ash::vk::PhysicalDeviceFeatures2::default()
@@ -314,8 +391,8 @@ fn create_logical_device(
     };
 
     let graphics_queue = unsafe { device.get_device_queue(graphics_queue_index, 0) };
-    let compute_queue = unsafe { device.get_device_queue(graphics_queue_index, 0) };
-    let transfer_queue = unsafe { device.get_device_queue(graphics_queue_index, 0) };
+    let compute_queue = unsafe { device.get_device_queue(compute_queue_index, 0) };
+    let transfer_queue = unsafe { device.get_device_queue(transfer_queue_index, 0) };
 
     log_info!("Graphics queue index: {}", graphics_queue_index);
     log_info!("Compute queue index: {}", compute_queue_index);
@@ -427,40 +504,12 @@ fn create_swapchain(
     (swapchain, swapchain_images)
 }
 
-fn create_image_views(
-    device: &ash::Device,
-    images: &Vec<ash::vk::Image>,
-    format: ash::vk::Format,
-    subresource_range: ash::vk::ImageSubresourceRange,
-) -> Vec<ash::vk::ImageView> {
-    let image_views: Vec<_> = images
-        .iter()
-        .map(|&e| {
-            let create_info = ash::vk::ImageViewCreateInfo::default()
-                .image(e)
-                .view_type(ash::vk::ImageViewType::TYPE_2D)
-                .format(format)
-                .subresource_range(subresource_range);
-
-            unsafe {
-                device
-                    .create_image_view(&create_info, None)
-                    .expect("unable to create image view")
-            }
-        })
-        .collect();
-    image_views
-}
-
 fn create_graphics_pipeline(
     device: &ash::Device,
     surface_format: ash::vk::SurfaceFormatKHR,
-) -> ash::vk::Pipeline {
+) -> (ash::vk::PipelineLayout, ash::vk::Pipeline) {
     let vs_path = compiled_spirv_path_for_source("assets/shaders/test.vert");
     let fs_path = compiled_spirv_path_for_source("assets/shaders/test.frag");
-
-    log_info!("{}", vs_path);
-    log_info!("{}", fs_path);
 
     let vs_code = load_file_as_vec_u32(&vs_path);
     let fs_code = load_file_as_vec_u32(&fs_path);
@@ -488,7 +537,7 @@ fn create_graphics_pipeline(
         .name(c"main");
 
     let fs_stage = ash::vk::PipelineShaderStageCreateInfo::default()
-        .stage(ash::vk::ShaderStageFlags::VERTEX)
+        .stage(ash::vk::ShaderStageFlags::FRAGMENT)
         .module(fs_module)
         .name(c"main");
 
@@ -569,22 +618,11 @@ fn create_graphics_pipeline(
             .create_graphics_pipelines(ash::vk::PipelineCache::null(), &[create_info], None)
             .expect("unable to create pipelines")
     };
-    pipelines[0]
-}
 
-pub fn load_file_as_vec_u32(file_path: &str) -> Vec<u32> {
-    let u8_bytes: Vec<u8> = std::fs::read(file_path).expect("failed to load file");
-    let u32_bytes: Vec<u32> = u8_bytes
-        .chunks_exact(4)
-        .map(|chunk| u32::from_le_bytes(chunk.try_into().expect("failed to convert u8 to u32")))
-        .collect();
-    u32_bytes
-}
+    unsafe {
+        device.destroy_shader_module(vs_module, None);
+        device.destroy_shader_module(fs_module, None);
+    }
 
-pub fn compiled_spirv_path_for_source(source_path: &str) -> String {
-    let prefix = format!("{}/", SHADER_SOURCE_DIR);
-    let rel = source_path
-        .strip_prefix(prefix.as_str())
-        .unwrap_or(source_path);
-    format!("{}/{}.spv", SHADER_OUTPUT_DIR, rel)
+    (pipeline_layout, pipelines[0])
 }
