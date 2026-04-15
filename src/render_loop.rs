@@ -1,211 +1,256 @@
 use std::{cell::Cell, sync::Arc};
 
 use crate::{
-    commands::{create_command_buffer, create_command_pool},
+    commands::{create_command_buffers, create_command_pool},
+    constants::MAX_FRAMES_IN_FLIGHT,
     images::transition_image_layout,
+    log_info,
     vcontext::Vcontext,
 };
 
 pub struct RenderLoop {
-    // vcontext: Arc<Vcontext>,
-    // command_pool: ash::vk::CommandPool,
-    // command_buffer: ash::vk::CommandBuffer,
-    // present_complete_semaphore: ash::vk::Semaphore,
-    // render_finished_semaphore: ash::vk::Semaphore,
-    // draw_fence: ash::vk::Fence,
-    // image_index: Cell<u32>,
+    vcontext: Arc<Vcontext>,
+    command_pool: ash::vk::CommandPool,
+    command_buffers: Vec<ash::vk::CommandBuffer>,
+    semaphores_present: Vec<ash::vk::Semaphore>,
+    semaphores_render: Vec<ash::vk::Semaphore>,
+    fences_draw: Vec<ash::vk::Fence>,
+    frame_index: Cell<usize>,
 }
 
 impl RenderLoop {
     pub fn new(vcontext: Arc<Vcontext>) -> Self {
         let command_pool = create_command_pool(&vcontext.device, vcontext.graphics_queue_index);
-        let command_buffer = create_command_buffer(&vcontext.device, command_pool);
+        let command_buffers = create_command_buffers(
+            &vcontext.device,
+            command_pool,
+            vcontext.state.borrow().image_count,
+        );
 
-        // let present_complete_semaphore = unsafe {
-        //     vcontext
-        //         .device
-        //         .create_semaphore(&ash::vk::SemaphoreCreateInfo::default(), None)
-        //         .expect("unable to create semaphore")
-        // };
-        // let render_finished_semaphore = unsafe {
-        //     vcontext
-        //         .device
-        //         .create_semaphore(&ash::vk::SemaphoreCreateInfo::default(), None)
-        //         .expect("unable to create semaphore")
-        // };
-        // let draw_fence = unsafe {
-        //     vcontext
-        //         .device
-        //         .create_fence(
-        //             &ash::vk::FenceCreateInfo::default().flags(ash::vk::FenceCreateFlags::SIGNALED),
-        //             None,
-        //         )
-        //         .expect("unable to create fence")
-        // };
+        let semaphores_present: Vec<_> = unsafe {
+            (0..MAX_FRAMES_IN_FLIGHT)
+                .map(|_| {
+                    vcontext
+                        .device
+                        .create_semaphore(&ash::vk::SemaphoreCreateInfo::default(), None)
+                        .expect("unable to create semaphore")
+                })
+                .collect()
+        };
+        let semaphores_render = unsafe {
+            (0..MAX_FRAMES_IN_FLIGHT)
+                .map(|_| {
+                    vcontext
+                        .device
+                        .create_semaphore(&ash::vk::SemaphoreCreateInfo::default(), None)
+                        .expect("unable to create semaphore")
+                })
+                .collect()
+        };
+        let fences_draw = unsafe {
+            (0..MAX_FRAMES_IN_FLIGHT)
+                .map(|_| {
+                    vcontext
+                        .device
+                        .create_fence(
+                            &ash::vk::FenceCreateInfo::default()
+                                .flags(ash::vk::FenceCreateFlags::SIGNALED),
+                            None,
+                        )
+                        .expect("unable to create fence")
+                })
+                .collect()
+        };
 
         Self {
-            // vcontext,
-            // command_pool,
-            // command_buffer,
-            // present_complete_semaphore,
-            // render_finished_semaphore,
-            // draw_fence,
-            // image_index: Cell::new(0),
+            vcontext,
+            command_pool,
+            command_buffers,
+            semaphores_present,
+            semaphores_render,
+            fences_draw,
+            frame_index: Cell::new(0),
         }
     }
 
-    // pub fn draw(&self) {
-    //     unsafe {
-    //         let fences = [self.draw_fence];
-    //         self.vcontext
-    //             .device
-    //             .wait_for_fences(&fences, true, u64::MAX)
-    //             .expect("unable to wait for fence");
-    //         self.vcontext
-    //             .device
-    //             .reset_fences(&fences)
-    //             .expect("unable to reset fences");
-    //     }
+    pub fn draw(&self) -> bool {
+        let frame_index = self.frame_index.get();
+        let vcontext_state = self.vcontext.state.borrow();
+        let surface_extent = vcontext_state.surface_capabilities.current_extent;
 
-    //     let (image_index, acquire_success) = unsafe {
-    //         self.vcontext
-    //             .swapchain_device
-    //             .acquire_next_image(
-    //                 self.vcontext.swapchain,
-    //                 u64::MAX,
-    //                 self.present_complete_semaphore,
-    //                 ash::vk::Fence::null(),
-    //             )
-    //             .expect("unable to acquire image")
-    //     };
+        let fences = &self.fences_draw[frame_index..frame_index + 1];
 
-    //     let cmd_begin_info = ash::vk::CommandBufferBeginInfo::default();
-    //     unsafe {
-    //         self.vcontext
-    //             .device
-    //             .begin_command_buffer(self.command_buffer, &cmd_begin_info)
-    //             .expect("unable to begin command buffer")
-    //     };
+        unsafe {
+            self.vcontext
+                .device
+                .wait_for_fences(&fences, true, u64::MAX)
+                .expect("unable to wait for fence")
+        };
 
-    //     transition_image_layout(
-    //         &self.vcontext.device,
-    //         self.command_buffer,
-    //         self.vcontext.swapchain_images[image_index as usize],
-    //         ash::vk::ImageLayout::UNDEFINED,
-    //         ash::vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-    //         ash::vk::AccessFlags2::empty(),
-    //         ash::vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
-    //         ash::vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
-    //         ash::vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
-    //     );
+        let image_acquire_result = unsafe {
+            self.vcontext.swapchain_device.acquire_next_image(
+                vcontext_state.swapchain,
+                u64::MAX,
+                self.semaphores_present[frame_index],
+                ash::vk::Fence::null(),
+            )
+        };
 
-    //     let clear_value = ash::vk::ClearValue {
-    //         color: ash::vk::ClearColorValue {
-    //             float32: [1.0, 1.0, 1.0, 1.0],
-    //         },
-    //     };
-    //     let color_attachments = [ash::vk::RenderingAttachmentInfo::default()
-    //         .image_view(self.vcontext.swapchain_image_views[image_index as usize])
-    //         .image_layout(ash::vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-    //         .load_op(ash::vk::AttachmentLoadOp::CLEAR)
-    //         .store_op(ash::vk::AttachmentStoreOp::STORE)
-    //         .clear_value(clear_value)];
-    //     let rendering_info = ash::vk::RenderingInfo::default()
-    //         .color_attachments(&color_attachments)
-    //         .render_area(
-    //             ash::vk::Rect2D::default()
-    //                 .offset(ash::vk::Offset2D { x: 0, y: 0 })
-    //                 .extent(self.vcontext.surface_extent),
-    //         )
-    //         .layer_count(1);
+        match image_acquire_result {
+            Ok((image_index, is_suboptimal)) => {
+                if is_suboptimal {
+                    return false;
+                }
 
-    //     unsafe {
-    //         self.vcontext
-    //             .device
-    //             .cmd_begin_rendering(self.command_buffer, &rendering_info)
-    //     };
-    //     unsafe {
-    //         self.vcontext.device.cmd_bind_pipeline(
-    //             self.command_buffer,
-    //             ash::vk::PipelineBindPoint::GRAPHICS,
-    //             self.vcontext.pipeline,
-    //         )
-    //     };
+                unsafe {
+                    self.vcontext
+                        .device
+                        .reset_fences(&fences)
+                        .expect("unable to reset fences")
+                };
 
-    //     let viewports = [ash::vk::Viewport {
-    //         x: 0_f32,
-    //         y: 0_f32,
-    //         height: self.vcontext.surface_extent.height as f32,
-    //         width: self.vcontext.surface_extent.width as f32,
-    //         min_depth: 0_f32,
-    //         max_depth: 1_f32,
-    //     }];
-    //     let scissors = [ash::vk::Rect2D {
-    //         offset: ash::vk::Offset2D { x: 0, y: 0 },
-    //         extent: self.vcontext.surface_extent,
-    //     }];
+                let command_buffer = self.command_buffers[image_index as usize];
 
-    //     unsafe {
-    //         self.vcontext
-    //             .device
-    //             .cmd_set_viewport(self.command_buffer, 0, &viewports);
-    //         self.vcontext
-    //             .device
-    //             .cmd_set_scissor(self.command_buffer, 0, &scissors);
-    //         self.vcontext
-    //             .device
-    //             .cmd_draw(self.command_buffer, 3, 1, 0, 0);
-    //         self.vcontext.device.cmd_end_rendering(self.command_buffer);
-    //     }
+                let cmd_begin_info = ash::vk::CommandBufferBeginInfo::default();
+                unsafe {
+                    self.vcontext
+                        .device
+                        .begin_command_buffer(command_buffer, &cmd_begin_info)
+                        .expect("unable to begin command buffer")
+                };
 
-    //     transition_image_layout(
-    //         &self.vcontext.device,
-    //         self.command_buffer,
-    //         self.vcontext.swapchain_images[image_index as usize],
-    //         ash::vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-    //         ash::vk::ImageLayout::PRESENT_SRC_KHR,
-    //         ash::vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
-    //         ash::vk::AccessFlags2::empty(),
-    //         ash::vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
-    //         ash::vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
-    //     );
+                transition_image_layout(
+                    &self.vcontext.device,
+                    command_buffer,
+                    vcontext_state.swapchain_images[image_index as usize],
+                    ash::vk::ImageLayout::UNDEFINED,
+                    ash::vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    ash::vk::AccessFlags2::empty(),
+                    ash::vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
+                    ash::vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
+                    ash::vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
+                );
 
-    //     unsafe {
-    //         self.vcontext
-    //             .device
-    //             .end_command_buffer(self.command_buffer)
-    //             .expect("unable to end command buffer");
-    //     }
+                let clear_value = ash::vk::ClearValue {
+                    color: ash::vk::ClearColorValue {
+                        float32: [1.0, 1.0, 1.0, 1.0],
+                    },
+                };
+                let color_attachments = [ash::vk::RenderingAttachmentInfo::default()
+                    .image_view(vcontext_state.swapchain_image_views[image_index as usize])
+                    .image_layout(ash::vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .load_op(ash::vk::AttachmentLoadOp::CLEAR)
+                    .store_op(ash::vk::AttachmentStoreOp::STORE)
+                    .clear_value(clear_value)];
+                let rendering_info = ash::vk::RenderingInfo::default()
+                    .color_attachments(&color_attachments)
+                    .render_area(
+                        ash::vk::Rect2D::default()
+                            .offset(ash::vk::Offset2D { x: 0, y: 0 })
+                            .extent(surface_extent),
+                    )
+                    .layer_count(1);
 
-    //     let submit_wait_semaphores = [self.present_complete_semaphore];
-    //     let submit_signal_semaphores = [self.render_finished_semaphore];
-    //     let command_buffers = [self.command_buffer];
+                unsafe {
+                    self.vcontext
+                        .device
+                        .cmd_begin_rendering(command_buffer, &rendering_info)
+                };
+                unsafe {
+                    self.vcontext.device.cmd_bind_pipeline(
+                        command_buffer,
+                        ash::vk::PipelineBindPoint::GRAPHICS,
+                        self.vcontext.pipeline,
+                    )
+                };
 
-    //     let submits = [ash::vk::SubmitInfo::default()
-    //         .wait_semaphores(&submit_wait_semaphores)
-    //         .wait_dst_stage_mask(&[ash::vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
-    //         .command_buffers(&command_buffers)
-    //         .signal_semaphores(&submit_signal_semaphores)];
+                let viewports = [ash::vk::Viewport {
+                    x: 0_f32,
+                    y: 0_f32,
+                    height: surface_extent.height as f32,
+                    width: surface_extent.width as f32,
+                    min_depth: 0_f32,
+                    max_depth: 1_f32,
+                }];
+                let scissors = [ash::vk::Rect2D {
+                    offset: ash::vk::Offset2D { x: 0, y: 0 },
+                    extent: surface_extent,
+                }];
 
-    //     unsafe {
-    //         self.vcontext
-    //             .device
-    //             .queue_submit(self.vcontext.graphics_queue, &submits, self.draw_fence)
-    //             .expect("unable to submit to queue");
-    //     }
+                unsafe {
+                    self.vcontext
+                        .device
+                        .cmd_set_viewport(command_buffer, 0, &viewports);
+                    self.vcontext
+                        .device
+                        .cmd_set_scissor(command_buffer, 0, &scissors);
+                    self.vcontext.device.cmd_draw(command_buffer, 3, 1, 0, 0);
+                    self.vcontext.device.cmd_end_rendering(command_buffer);
+                }
 
-    //     let present_wait_semaphore = [self.render_finished_semaphore];
-    //     let swapchains = [self.vcontext.swapchain];
-    //     let image_indices = [image_index];
-    //     let present_info = ash::vk::PresentInfoKHR::default()
-    //         .wait_semaphores(&present_wait_semaphore)
-    //         .swapchains(&swapchains)
-    //         .image_indices(&image_indices);
-    //     unsafe {
-    //         self.vcontext
-    //             .swapchain_device
-    //             .queue_present(self.vcontext.graphics_queue, &present_info)
-    //             .expect("unable to present queue");
-    //     }
-    // }
+                transition_image_layout(
+                    &self.vcontext.device,
+                    command_buffer,
+                    vcontext_state.swapchain_images[image_index as usize],
+                    ash::vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    ash::vk::ImageLayout::PRESENT_SRC_KHR,
+                    ash::vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
+                    ash::vk::AccessFlags2::empty(),
+                    ash::vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
+                    ash::vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
+                );
+
+                unsafe {
+                    self.vcontext
+                        .device
+                        .end_command_buffer(command_buffer)
+                        .expect("unable to end command buffer");
+                }
+
+                let submits = [ash::vk::SubmitInfo::default()
+                    .wait_semaphores(&self.semaphores_present[frame_index..frame_index + 1])
+                    .wait_dst_stage_mask(&[ash::vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
+                    .command_buffers(std::slice::from_ref(&command_buffer))
+                    .signal_semaphores(&self.semaphores_render[frame_index..frame_index + 1])];
+
+                unsafe {
+                    self.vcontext
+                        .device
+                        .queue_submit(
+                            self.vcontext.graphics_queue,
+                            &submits,
+                            self.fences_draw[frame_index],
+                        )
+                        .expect("unable to submit to queue");
+                }
+
+                let swapchains = [vcontext_state.swapchain];
+                let image_indices = [image_index];
+                let present_info = ash::vk::PresentInfoKHR::default()
+                    .wait_semaphores(&self.semaphores_render[frame_index..frame_index + 1])
+                    .swapchains(&swapchains)
+                    .image_indices(&image_indices);
+
+                let present_result = unsafe {
+                    self.vcontext
+                        .swapchain_device
+                        .queue_present(self.vcontext.graphics_queue, &present_info)
+                };
+                match present_result {
+                    Ok(is_suboptimal) => {
+                        if is_suboptimal {
+                            return false;
+                        }
+
+                        self.frame_index
+                            .set((frame_index + 1) % MAX_FRAMES_IN_FLIGHT);
+
+                        true
+                    }
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    }
 }

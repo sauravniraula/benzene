@@ -1,6 +1,9 @@
-use std::{cell::Cell, ffi::CStr};
+use std::{
+    cell::{Cell, RefCell},
+    ffi::CStr,
+};
 
-use ash;
+use ash::{self, khr::swapchain};
 use ash_window;
 use winit;
 
@@ -26,7 +29,16 @@ unsafe extern "system" fn vulkan_debug_callback(
     ash::vk::FALSE
 }
 
+pub struct VcontextState {
+    pub swapchain: ash::vk::SwapchainKHR,
+    pub swapchain_images: Vec<ash::vk::Image>,
+    pub swapchain_image_views: Vec<ash::vk::ImageView>,
+    pub surface_capabilities: ash::vk::SurfaceCapabilitiesKHR,
+    pub image_count: u32,
+}
+
 pub struct Vcontext {
+    pub entry: ash::Entry,
     pub instance: ash::Instance,
     pub debug_utils_loader: ash::ext::debug_utils::Instance,
     pub debug_messenger: ash::vk::DebugUtilsMessengerEXT,
@@ -42,15 +54,10 @@ pub struct Vcontext {
     pub transfer_queue: ash::vk::Queue,
     pub surface_format: ash::vk::SurfaceFormatKHR,
     pub present_mode: ash::vk::PresentModeKHR,
-    pub surface_extent: ash::vk::Extent2D,
-    pub current_transform: ash::vk::SurfaceTransformFlagsKHR,
-    pub image_count: u32,
     pub swapchain_device: ash::khr::swapchain::Device,
-    pub swapchain: ash::vk::SwapchainKHR,
-    pub swapchain_images: Vec<ash::vk::Image>,
-    pub swapchain_image_views: Vec<ash::vk::ImageView>,
     pub pipeline_layout: ash::vk::PipelineLayout,
     pub pipeline: ash::vk::Pipeline,
+    pub state: RefCell<VcontextState>,
 }
 
 impl Vcontext {
@@ -132,32 +139,34 @@ impl Vcontext {
             &device_extensions,
         );
 
-        let (surface_format, present_mode, surface_extent, current_transform, image_count) =
-            choose_surface_details(physical_device, &surface_instance, surface);
+        let surface_format = choose_surface_format(physical_device, &surface_instance, surface);
+        let present_mode = choose_present_mode(physical_device, &surface_instance, surface);
 
         let swapchain_device = ash::khr::swapchain::Device::new(&instance, &device);
-        let (swapchain, swapchain_images) = create_swapchain(
-            &swapchain_device,
-            surface,
-            surface_format,
-            present_mode,
-            surface_extent,
-            current_transform,
-            image_count,
-        );
-        let swapchain_image_views = create_image_views(
-            &device,
-            &swapchain_images,
-            surface_format.format,
-            ash::vk::ImageSubresourceRange::default()
-                .layer_count(1)
-                .level_count(1)
-                .aspect_mask(ash::vk::ImageAspectFlags::COLOR),
-        );
+
+        let (swapchain, swapchain_images, swapchain_image_views, surface_capabilities, image_count) =
+            create_swapchain(
+                physical_device,
+                &device,
+                &swapchain_device,
+                &surface_instance,
+                surface,
+                surface_format,
+                present_mode,
+            );
 
         let (pipeline_layout, pipeline) = create_graphics_pipeline(&device, surface_format);
 
+        let state = RefCell::new(VcontextState {
+            swapchain: swapchain,
+            swapchain_images: swapchain_images,
+            swapchain_image_views: swapchain_image_views,
+            surface_capabilities: surface_capabilities,
+            image_count: image_count,
+        });
+
         Self {
+            entry,
             instance,
             debug_utils_loader,
             debug_messenger,
@@ -173,19 +182,44 @@ impl Vcontext {
             transfer_queue,
             surface_format,
             present_mode,
-            surface_extent,
-            current_transform,
-            image_count,
             swapchain_device,
-            swapchain,
-            swapchain_images,
-            swapchain_image_views,
             pipeline_layout,
             pipeline,
+            state,
         }
     }
 
-    pub fn destory(&mut self) {
+    pub fn recreate_swapchain(&self) {
+        let mut state = self.state.borrow_mut();
+
+        unsafe {
+            state.swapchain_image_views.iter().for_each(|&e| {
+                self.device.destroy_image_view(e, None);
+            });
+            self.swapchain_device
+                .destroy_swapchain(state.swapchain, None);
+        }
+
+        let (swapchain, swapchain_images, swapchain_image_views, surface_capabilities, image_count) =
+            create_swapchain(
+                self.physical_device,
+                &self.device,
+                &self.swapchain_device,
+                &self.surface_instance,
+                self.surface,
+                self.surface_format,
+                self.present_mode,
+            );
+        state.swapchain = swapchain;
+        state.swapchain_images = swapchain_images;
+        state.swapchain_image_views = swapchain_image_views;
+        state.surface_capabilities = surface_capabilities;
+        state.image_count = image_count;
+    }
+}
+
+impl Drop for Vcontext {
+    fn drop(&mut self) {
         unsafe {
             let _ = self.device.device_wait_idle();
 
@@ -193,12 +227,12 @@ impl Vcontext {
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
 
-            for &image_view in &self.swapchain_image_views {
-                self.device.destroy_image_view(image_view, None);
-            }
+            // for &image_view in &self.swapchain_image_views {
+            //     self.device.destroy_image_view(image_view, None);
+            // }
 
-            self.swapchain_device
-                .destroy_swapchain(self.swapchain, None);
+            // self.swapchain_device
+            //     .destroy_swapchain(self.swapchain, None);
             self.device.destroy_device(None);
             self.surface_instance.destroy_surface(self.surface, None);
             self.debug_utils_loader
@@ -409,33 +443,16 @@ fn create_logical_device(
     )
 }
 
-fn choose_surface_details(
+fn choose_surface_format(
     physical_device: ash::vk::PhysicalDevice,
     surface_instance: &ash::khr::surface::Instance,
     surface: ash::vk::SurfaceKHR,
-) -> (
-    ash::vk::SurfaceFormatKHR,
-    ash::vk::PresentModeKHR,
-    ash::vk::Extent2D,
-    ash::vk::SurfaceTransformFlagsKHR,
-    u32,
-) {
+) -> ash::vk::SurfaceFormatKHR {
     let surface_formats = unsafe {
         surface_instance
             .get_physical_device_surface_formats(physical_device, surface)
             .expect("unable to get supported surface formats")
     };
-    let surface_capabilities = unsafe {
-        surface_instance
-            .get_physical_device_surface_capabilities(physical_device, surface)
-            .expect("unable to get surface capabilities")
-    };
-    let present_modes = unsafe {
-        surface_instance
-            .get_physical_device_surface_present_modes(physical_device, surface)
-            .expect("unable to get supported present modes")
-    };
-
     let surface_format = surface_formats
         .iter()
         .find(|&&e| {
@@ -443,50 +460,60 @@ fn choose_surface_details(
                 && e.color_space == ash::vk::ColorSpaceKHR::SRGB_NONLINEAR
         })
         .expect("unable to select surface format");
+    log_info!("Selected surface format: {:?}", surface_format);
+    *surface_format
+}
 
+fn choose_present_mode(
+    physical_device: ash::vk::PhysicalDevice,
+    surface_instance: &ash::khr::surface::Instance,
+    surface: ash::vk::SurfaceKHR,
+) -> ash::vk::PresentModeKHR {
+    let present_modes = unsafe {
+        surface_instance
+            .get_physical_device_surface_present_modes(physical_device, surface)
+            .expect("unable to get supported present modes")
+    };
     let present_mode = present_modes
         .iter()
         .find(|&&e| e == ash::vk::PresentModeKHR::FIFO)
         .expect("unable to select present mode");
-
-    let surface_extent = surface_capabilities.current_extent;
-    let current_transform = surface_capabilities.current_transform;
-    let image_count = surface_capabilities.min_image_count + 1;
-
-    log_info!("Selected surface format: {:?}", surface_format);
     log_info!("Selected present mode: {:?}", present_mode);
-    log_info!("Selected surface resolution: {:?}", surface_extent);
-    log_info!("Surface transform: {:?}", current_transform);
-    log_info!("Selected image count: {:?}", image_count);
-
-    (
-        *surface_format,
-        *present_mode,
-        surface_extent,
-        current_transform,
-        image_count,
-    )
+    *present_mode
 }
 
 fn create_swapchain(
+    physical_device: ash::vk::PhysicalDevice,
+    device: &ash::Device,
     swapchain_device: &ash::khr::swapchain::Device,
+    surface_instance: &ash::khr::surface::Instance,
     surface: ash::vk::SurfaceKHR,
     surface_format: ash::vk::SurfaceFormatKHR,
     present_mode: ash::vk::PresentModeKHR,
-    surface_extent: ash::vk::Extent2D,
-    current_transform: ash::vk::SurfaceTransformFlagsKHR,
-    image_count: u32,
-) -> (ash::vk::SwapchainKHR, Vec<ash::vk::Image>) {
+) -> (
+    ash::vk::SwapchainKHR,
+    Vec<ash::vk::Image>,
+    Vec<ash::vk::ImageView>,
+    ash::vk::SurfaceCapabilitiesKHR,
+    u32,
+) {
+    let surface_capabilities = unsafe {
+        surface_instance
+            .get_physical_device_surface_capabilities(physical_device, surface)
+            .expect("unable to get surface capabilities")
+    };
+    let image_count = surface_capabilities.min_image_count + 1;
+
     let create_info = ash::vk::SwapchainCreateInfoKHR::default()
         .surface(surface)
         .min_image_count(image_count)
         .image_format(surface_format.format)
         .image_color_space(surface_format.color_space)
-        .image_extent(surface_extent)
+        .image_extent(surface_capabilities.current_extent)
         .image_array_layers(1)
         .image_usage(ash::vk::ImageUsageFlags::COLOR_ATTACHMENT)
         .image_sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
-        .pre_transform(current_transform)
+        .pre_transform(surface_capabilities.current_transform)
         .composite_alpha(ash::vk::CompositeAlphaFlagsKHR::OPAQUE)
         .present_mode(present_mode)
         .clipped(true);
@@ -501,7 +528,24 @@ fn create_swapchain(
             .get_swapchain_images(swapchain)
             .expect("unable to get swapchain images")
     };
-    (swapchain, swapchain_images)
+
+    let swapchain_image_views = create_image_views(
+        device,
+        &swapchain_images,
+        surface_format.format,
+        ash::vk::ImageSubresourceRange::default()
+            .layer_count(1)
+            .level_count(1)
+            .aspect_mask(ash::vk::ImageAspectFlags::COLOR),
+    );
+
+    (
+        swapchain,
+        swapchain_images,
+        swapchain_image_views,
+        surface_capabilities,
+        image_count,
+    )
 }
 
 fn create_graphics_pipeline(

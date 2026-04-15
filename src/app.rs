@@ -3,7 +3,7 @@ use std::{ffi::CStr, sync::Arc};
 use crate::{
     log, log_info,
     render_loop::{self, RenderLoop},
-    vcontext::Vcontext,
+    vcontext::{self, Vcontext},
 };
 use ash_window;
 use winit::{
@@ -70,14 +70,20 @@ impl winit::application::ApplicationHandler for App {
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
+        let vcontext = self.vcontext.as_ref().unwrap();
+        let render_loop = self.render_loop.as_ref().unwrap();
+
         match event {
             winit::event::WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
-                // if let Some(render_loop) = &self.render_loop {
-                //     render_loop.draw();
-                // }
+                let success = render_loop.draw();
+                if !success {
+                    vcontext.recreate_swapchain();
+                }
+
+                self.window.as_ref().unwrap().request_redraw();
             }
             _ => (),
         }

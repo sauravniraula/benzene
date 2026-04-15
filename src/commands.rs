@@ -10,18 +10,19 @@ pub fn create_command_pool(device: &ash::Device, queue_family_index: u32) -> ash
     }
 }
 
-pub fn create_command_buffer(
+pub fn create_command_buffers(
     device: &ash::Device,
     command_pool: ash::vk::CommandPool,
-) -> ash::vk::CommandBuffer {
+    count: u32,
+) -> Vec<ash::vk::CommandBuffer> {
     unsafe {
         device
             .allocate_command_buffers(
                 &ash::vk::CommandBufferAllocateInfo::default()
                     .command_pool(command_pool)
-                    .command_buffer_count(1)
+                    .command_buffer_count(count)
                     .level(ash::vk::CommandBufferLevel::PRIMARY),
             )
-            .expect("unable to create command buffer")[0]
+            .expect("unable to create command buffer")
     }
 }
