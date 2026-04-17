@@ -1,12 +1,17 @@
 use std::{cell::Cell, sync::Arc};
 
 use crate::{
-    commands::{create_command_buffers, create_command_pool},
+    backend::{
+        command_buffer::{create_command_buffers, create_command_pool},
+        image::transition_image_layout,
+        vcontext::Vcontext,
+    },
     constants::MAX_FRAMES_IN_FLIGHT,
-    images::transition_image_layout,
-    log_info,
-    vcontext::Vcontext,
 };
+
+pub struct RenderContext {
+    pub cmd: ash::vk::CommandBuffer,
+}
 
 pub struct RenderLoop {
     vcontext: Arc<Vcontext>,
@@ -73,7 +78,7 @@ impl RenderLoop {
         }
     }
 
-    pub fn draw(&self) -> bool {
+    pub fn draw<F: FnMut(RenderContext)>(&mut self, mut render: F) -> bool {
         let frame_index = self.frame_index.get();
         let vcontext_state = self.vcontext.state.borrow();
         let surface_extent = vcontext_state.surface_capabilities.current_extent;
@@ -84,8 +89,8 @@ impl RenderLoop {
             self.vcontext
                 .device
                 .wait_for_fences(&fences, true, u64::MAX)
-                .expect("unable to wait for fence")
-        };
+                .expect("unable to wait for fence");
+        }
 
         let image_acquire_result = unsafe {
             self.vcontext.swapchain_device.acquire_next_image(
@@ -151,19 +156,6 @@ impl RenderLoop {
                     )
                     .layer_count(1);
 
-                unsafe {
-                    self.vcontext
-                        .device
-                        .cmd_begin_rendering(command_buffer, &rendering_info)
-                };
-                unsafe {
-                    self.vcontext.device.cmd_bind_pipeline(
-                        command_buffer,
-                        ash::vk::PipelineBindPoint::GRAPHICS,
-                        self.vcontext.pipeline,
-                    )
-                };
-
                 let viewports = [ash::vk::Viewport {
                     x: 0_f32,
                     y: 0_f32,
@@ -180,13 +172,21 @@ impl RenderLoop {
                 unsafe {
                     self.vcontext
                         .device
+                        .cmd_begin_rendering(command_buffer, &rendering_info);
+                    self.vcontext
+                        .device
                         .cmd_set_viewport(command_buffer, 0, &viewports);
                     self.vcontext
                         .device
                         .cmd_set_scissor(command_buffer, 0, &scissors);
-                    self.vcontext.device.cmd_draw(command_buffer, 3, 1, 0, 0);
-                    self.vcontext.device.cmd_end_rendering(command_buffer);
-                }
+                };
+
+                let render_context = RenderContext {
+                    cmd: command_buffer,
+                };
+                render(render_context);
+
+                unsafe { self.vcontext.device.cmd_end_rendering(command_buffer) };
 
                 transition_image_layout(
                     &self.vcontext.device,
@@ -251,6 +251,25 @@ impl RenderLoop {
                 }
             }
             _ => false,
+        }
+    }
+}
+
+impl Drop for RenderLoop {
+    fn drop(&mut self) {
+        let device = &self.vcontext.device;
+        unsafe {
+            let _ = device.device_wait_idle();
+            for &each in &self.semaphores_present {
+                device.destroy_semaphore(each, None);
+            }
+            for &each in &self.semaphores_render {
+                device.destroy_semaphore(each, None);
+            }
+            for &each in &self.fences_draw {
+                device.destroy_fence(each, None);
+            }
+            device.destroy_command_pool(self.command_pool, None);
         }
     }
 }

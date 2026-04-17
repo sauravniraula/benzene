@@ -1,17 +1,10 @@
-use std::{
-    cell::{Cell, RefCell},
-    ffi::CStr,
-};
+use std::{cell::RefCell, ffi::CStr};
 
-use ash::{self, khr::swapchain};
+use ash::{self};
 use ash_window;
 use winit;
 
-use crate::{
-    images::create_image_views,
-    log_info,
-    shaders::{compiled_spirv_path_for_source, load_file_as_vec_u32},
-};
+use crate::{backend::image::create_image_views, log_info};
 
 unsafe extern "system" fn vulkan_debug_callback(
     message_severity: ash::vk::DebugUtilsMessageSeverityFlagsEXT,
@@ -45,6 +38,7 @@ pub struct Vcontext {
     pub surface_instance: ash::khr::surface::Instance,
     pub surface: ash::vk::SurfaceKHR,
     pub physical_device: ash::vk::PhysicalDevice,
+    pub memory_properties: ash::vk::PhysicalDeviceMemoryProperties,
     pub device: ash::Device,
     pub graphics_queue_index: u32,
     pub compute_queue_index: u32,
@@ -55,8 +49,6 @@ pub struct Vcontext {
     pub surface_format: ash::vk::SurfaceFormatKHR,
     pub present_mode: ash::vk::PresentModeKHR,
     pub swapchain_device: ash::khr::swapchain::Device,
-    pub pipeline_layout: ash::vk::PipelineLayout,
-    pub pipeline: ash::vk::Pipeline,
     pub state: RefCell<VcontextState>,
 }
 
@@ -123,6 +115,9 @@ impl Vcontext {
         let device_extensions = vec![ash::vk::KHR_SWAPCHAIN_NAME];
         let physical_device = pick_physical_device(&instance, &device_extensions);
 
+        let memory_properties =
+            unsafe { instance.get_physical_device_memory_properties(physical_device) };
+
         let (
             device,
             graphics_queue_index,
@@ -155,8 +150,6 @@ impl Vcontext {
                 present_mode,
             );
 
-        let (pipeline_layout, pipeline) = create_graphics_pipeline(&device, surface_format);
-
         let state = RefCell::new(VcontextState {
             swapchain: swapchain,
             swapchain_images: swapchain_images,
@@ -173,6 +166,7 @@ impl Vcontext {
             surface_instance,
             surface,
             physical_device,
+            memory_properties,
             device,
             graphics_queue_index,
             compute_queue_index,
@@ -183,8 +177,6 @@ impl Vcontext {
             surface_format,
             present_mode,
             swapchain_device,
-            pipeline_layout,
-            pipeline,
             state,
         }
     }
@@ -222,17 +214,14 @@ impl Drop for Vcontext {
     fn drop(&mut self) {
         unsafe {
             let _ = self.device.device_wait_idle();
+            let state = self.state.borrow();
 
-            self.device.destroy_pipeline(self.pipeline, None);
-            self.device
-                .destroy_pipeline_layout(self.pipeline_layout, None);
+            for &each in &state.swapchain_image_views {
+                self.device.destroy_image_view(each, None);
+            }
+            self.swapchain_device
+                .destroy_swapchain(state.swapchain, None);
 
-            // for &image_view in &self.swapchain_image_views {
-            //     self.device.destroy_image_view(image_view, None);
-            // }
-
-            // self.swapchain_device
-            //     .destroy_swapchain(self.swapchain, None);
             self.device.destroy_device(None);
             self.surface_instance.destroy_surface(self.surface, None);
             self.debug_utils_loader
@@ -546,127 +535,4 @@ fn create_swapchain(
         surface_capabilities,
         image_count,
     )
-}
-
-fn create_graphics_pipeline(
-    device: &ash::Device,
-    surface_format: ash::vk::SurfaceFormatKHR,
-) -> (ash::vk::PipelineLayout, ash::vk::Pipeline) {
-    let vs_path = compiled_spirv_path_for_source("assets/shaders/test.vert");
-    let fs_path = compiled_spirv_path_for_source("assets/shaders/test.frag");
-
-    let vs_code = load_file_as_vec_u32(&vs_path);
-    let fs_code = load_file_as_vec_u32(&fs_path);
-
-    let vs_module = unsafe {
-        device
-            .create_shader_module(
-                &ash::vk::ShaderModuleCreateInfo::default().code(&vs_code),
-                None,
-            )
-            .expect("unable to create shader module")
-    };
-    let fs_module = unsafe {
-        device
-            .create_shader_module(
-                &ash::vk::ShaderModuleCreateInfo::default().code(&fs_code),
-                None,
-            )
-            .expect("unable to create shader module")
-    };
-
-    let vs_stage = ash::vk::PipelineShaderStageCreateInfo::default()
-        .stage(ash::vk::ShaderStageFlags::VERTEX)
-        .module(vs_module)
-        .name(c"main");
-
-    let fs_stage = ash::vk::PipelineShaderStageCreateInfo::default()
-        .stage(ash::vk::ShaderStageFlags::FRAGMENT)
-        .module(fs_module)
-        .name(c"main");
-
-    let shader_stages = [vs_stage, fs_stage];
-
-    let dynamic_state = ash::vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&[
-        ash::vk::DynamicState::VIEWPORT,
-        ash::vk::DynamicState::SCISSOR,
-    ]);
-
-    let vertex_input_state = ash::vk::PipelineVertexInputStateCreateInfo::default();
-
-    let input_assembly_state = ash::vk::PipelineInputAssemblyStateCreateInfo::default()
-        .topology(ash::vk::PrimitiveTopology::TRIANGLE_LIST);
-
-    // let viewport = ash::vk::Viewport::default()
-    //     .x(0_f32)
-    //     .y(0_f32)
-    //     .width(surface_extent.width as f32)
-    //     .height(surface_extent.height as f32)
-    //     .min_depth(0_f32)
-    //     .max_depth(1_f32);
-
-    // let scissor = ash::vk::Rect2D::default()
-    //     .offset(ash::vk::Offset2D::default().x(0).y(0))
-    //     .extent(*surface_extent);
-
-    let viewport_state = ash::vk::PipelineViewportStateCreateInfo::default()
-        .viewport_count(1)
-        .scissor_count(1);
-
-    let rasterization_state = ash::vk::PipelineRasterizationStateCreateInfo::default()
-        .depth_clamp_enable(false)
-        .rasterizer_discard_enable(false)
-        .polygon_mode(ash::vk::PolygonMode::FILL)
-        .cull_mode(ash::vk::CullModeFlags::BACK)
-        .front_face(ash::vk::FrontFace::CLOCKWISE)
-        .depth_bias_enable(false)
-        .line_width(1_f32);
-
-    let multisampling_state = ash::vk::PipelineMultisampleStateCreateInfo::default()
-        .rasterization_samples(ash::vk::SampleCountFlags::TYPE_1)
-        .sample_shading_enable(false);
-
-    let color_blend_attachments = [ash::vk::PipelineColorBlendAttachmentState::default()
-        .blend_enable(false)
-        .color_write_mask(ash::vk::ColorComponentFlags::RGBA)];
-
-    let color_blend_state = ash::vk::PipelineColorBlendStateCreateInfo::default()
-        .logic_op_enable(false)
-        .logic_op(ash::vk::LogicOp::COPY)
-        .attachments(&color_blend_attachments);
-
-    let pipeline_layout = unsafe {
-        device
-            .create_pipeline_layout(&ash::vk::PipelineLayoutCreateInfo::default(), None)
-            .expect("unable to create pipeline layout")
-    };
-
-    let color_attachment_formats = [surface_format.format];
-    let mut rendering_info = ash::vk::PipelineRenderingCreateInfo::default()
-        .color_attachment_formats(&color_attachment_formats);
-
-    let create_info = ash::vk::GraphicsPipelineCreateInfo::default()
-        .push_next(&mut rendering_info)
-        .stages(&shader_stages)
-        .vertex_input_state(&vertex_input_state)
-        .input_assembly_state(&input_assembly_state)
-        .rasterization_state(&rasterization_state)
-        .multisample_state(&multisampling_state)
-        .color_blend_state(&color_blend_state)
-        .dynamic_state(&dynamic_state)
-        .viewport_state(&viewport_state)
-        .layout(pipeline_layout);
-
-    let pipelines = unsafe {
-        device
-            .create_graphics_pipelines(ash::vk::PipelineCache::null(), &[create_info], None)
-            .expect("unable to create pipelines")
-    };
-
-    unsafe {
-        device.destroy_shader_module(vs_module, None);
-        device.destroy_shader_module(fs_module, None);
-    }
-
-    (pipeline_layout, pipelines[0])
 }

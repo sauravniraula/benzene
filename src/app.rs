@@ -1,9 +1,9 @@
 use std::{ffi::CStr, sync::Arc};
 
 use crate::{
-    log, log_info,
-    render_loop::{self, RenderLoop},
-    vcontext::{self, Vcontext},
+    backend::{render_loop::RenderLoop, vcontext::Vcontext},
+    log_info,
+    render::owner::RenderOwner,
 };
 use ash_window;
 use winit::{
@@ -15,6 +15,7 @@ pub struct App {
     window: Option<winit::window::Window>,
     vcontext: Option<Arc<Vcontext>>,
     render_loop: Option<RenderLoop>,
+    render_owner: Option<RenderOwner>,
 }
 
 impl App {
@@ -24,6 +25,7 @@ impl App {
             window: None,
             vcontext: None,
             render_loop: None,
+            render_owner: None,
         };
         event_loop
             .run_app(&mut app)
@@ -58,8 +60,8 @@ impl winit::application::ApplicationHandler for App {
             window_handle,
         ));
 
+        self.render_owner = Some(RenderOwner::new(vcontext.clone()));
         self.render_loop = Some(RenderLoop::new(vcontext.clone()));
-
         self.window = Some(window);
         self.vcontext = Some(vcontext);
     }
@@ -67,22 +69,24 @@ impl winit::application::ApplicationHandler for App {
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
-        window_id: winit::window::WindowId,
+        _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
         let vcontext = self.vcontext.as_ref().unwrap();
-        let render_loop = self.render_loop.as_ref().unwrap();
+        let render_loop = self.render_loop.as_mut().unwrap();
+        let render_owner = self.render_owner.as_ref().unwrap();
 
         match event {
             winit::event::WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
-                let success = render_loop.draw();
+                let success = render_loop.draw(|render_context| {
+                    render_owner.render(render_context);
+                });
                 if !success {
                     vcontext.recreate_swapchain();
                 }
-
                 self.window.as_ref().unwrap().request_redraw();
             }
             _ => (),

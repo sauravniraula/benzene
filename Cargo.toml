@@ -7,6 +7,7 @@ edition = "2024"
 ash = "0.38.0"
 ash-window = "0.13.0"
 chrono = "0.4.44"
+glam = "0.32.1"
 winit = "0.30.13"
 
 # [dependencies]
