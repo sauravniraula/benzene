@@ -1,55 +1,15 @@
 use std::sync::Arc;
 
 use crate::backend::{buffer::create_buffer, vcontext::Vcontext, vertex_3d::Vertex3D};
-use glam;
 
 pub struct Mesh {
-    pub vcontext: Arc<Vcontext>,
     pub vertices: Vec<Vertex3D>,
     pub vertex_buffer: ash::vk::Buffer,
     pub vertex_memory: ash::vk::DeviceMemory,
 }
 
 impl Mesh {
-    pub fn new(vcontext: Arc<Vcontext>) -> Self {
-        let vertices = vec![
-            Vertex3D {
-                pos: glam::Vec3 {
-                    x: -0.5,
-                    y: 0.5,
-                    z: 0.0,
-                },
-                color: glam::Vec3 {
-                    x: 1.0,
-                    y: 0.0,
-                    z: 0.0,
-                },
-            },
-            Vertex3D {
-                pos: glam::Vec3 {
-                    x: 0.0,
-                    y: -0.5,
-                    z: 0.0,
-                },
-                color: glam::Vec3 {
-                    x: 0.0,
-                    y: 1.0,
-                    z: 0.0,
-                },
-            },
-            Vertex3D {
-                pos: glam::Vec3 {
-                    x: 0.5,
-                    y: 0.5,
-                    z: 0.0,
-                },
-                color: glam::Vec3 {
-                    x: 0.0,
-                    y: 0.0,
-                    z: 1.0,
-                },
-            },
-        ];
+    pub fn new(vcontext: &Arc<Vcontext>, vertices: Vec<Vertex3D>) -> Self {
         let vertices_len = vertices.len() as u64;
         let vertex_size = vertices_len * Vertex3D::size();
 
@@ -80,17 +40,14 @@ impl Mesh {
         }
 
         Self {
-            vcontext,
             vertices,
             vertex_buffer,
             vertex_memory,
         }
     }
-}
 
-impl Drop for Mesh {
-    fn drop(&mut self) {
-        let device = &self.vcontext.device;
+    pub fn drop(&self, vcontext: &Arc<Vcontext>) {
+        let device = &vcontext.device;
         unsafe {
             let _ = device.device_wait_idle();
             device.free_memory(self.vertex_memory, None);

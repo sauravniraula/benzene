@@ -28,7 +28,7 @@ pub fn create_buffer(
     );
 
     let mai = ash::vk::MemoryAllocateInfo::default()
-        .allocation_size(size)
+        .allocation_size(vmr.size)
         .memory_type_index(mti);
 
     let memory = unsafe {
