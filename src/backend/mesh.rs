@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use crate::backend::{buffer::create_buffer, vcontext::Vcontext, vertex_3d::Vertex3D};
+use crate::{
+    backend::{buffer::create_buffer, vcontext::Vcontext},
+    render::vertex_3d::Vertex3D,
+};
 
 pub struct Mesh {
     pub vertices: Vec<Vertex3D>,

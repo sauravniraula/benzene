@@ -23,6 +23,25 @@ pub struct RenderLoop {
     frame_index: Cell<usize>,
 }
 
+impl Drop for RenderLoop {
+    fn drop(&mut self) {
+        let device = &self.vcontext.device;
+        unsafe {
+            let _ = device.device_wait_idle();
+            for &each in &self.semaphores_present {
+                device.destroy_semaphore(each, None);
+            }
+            for &each in &self.semaphores_render {
+                device.destroy_semaphore(each, None);
+            }
+            for &each in &self.fences_draw {
+                device.destroy_fence(each, None);
+            }
+            device.destroy_command_pool(self.command_pool, None);
+        }
+    }
+}
+
 impl RenderLoop {
     pub fn new(vcontext: Arc<Vcontext>) -> Self {
         let command_pool = create_command_pool(&vcontext.device, vcontext.graphics_queue_index);
@@ -251,25 +270,6 @@ impl RenderLoop {
                 }
             }
             _ => false,
-        }
-    }
-}
-
-impl Drop for RenderLoop {
-    fn drop(&mut self) {
-        let device = &self.vcontext.device;
-        unsafe {
-            let _ = device.device_wait_idle();
-            for &each in &self.semaphores_present {
-                device.destroy_semaphore(each, None);
-            }
-            for &each in &self.semaphores_render {
-                device.destroy_semaphore(each, None);
-            }
-            for &each in &self.fences_draw {
-                device.destroy_fence(each, None);
-            }
-            device.destroy_command_pool(self.command_pool, None);
         }
     }
 }

@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use crate::{
-    backend::{mesh::Mesh, render_loop::RenderContext, vcontext::Vcontext, vertex_3d::Vertex3D},
-    render::geometry::RenderGeometry,
+    backend::{mesh::Mesh, render_loop::RenderContext, vcontext::Vcontext},
+    render::{geometry::RenderGeometry, vertex_3d::Vertex3D},
 };
 
 pub struct RenderOwner {
@@ -10,6 +10,13 @@ pub struct RenderOwner {
     render_geometry: RenderGeometry,
     a_mesh: Mesh,
     b_mesh: Mesh,
+}
+
+impl Drop for RenderOwner {
+    fn drop(&mut self) {
+        self.a_mesh.drop(&self.vcontext);
+        self.b_mesh.drop(&self.vcontext);
+    }
 }
 
 impl RenderOwner {
@@ -119,12 +126,5 @@ impl RenderOwner {
             device.cmd_bind_vertex_buffers(cmd, 0, &[self.b_mesh.vertex_buffer], &[0]);
             device.cmd_draw(cmd, self.b_mesh.vertices.len() as u32, 1, 0, 0);
         }
-    }
-}
-
-impl Drop for RenderOwner {
-    fn drop(&mut self) {
-        self.a_mesh.drop(&self.vcontext);
-        self.b_mesh.drop(&self.vcontext);
     }
 }

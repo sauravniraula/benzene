@@ -1,15 +1,26 @@
 use std::sync::Arc;
 
-use crate::backend::{
+use crate::{
+    backend::vcontext::Vcontext,
     file::{compiled_spirv_path_for_source, load_file_as_vec_u32},
-    vcontext::Vcontext,
-    vertex_3d::Vertex3D,
+    render::vertex_3d::Vertex3D,
 };
 
 pub struct RenderGeometry {
     vcontext: Arc<Vcontext>,
     pub pipeline: ash::vk::Pipeline,
     pub pipeline_layout: ash::vk::PipelineLayout,
+}
+
+impl Drop for RenderGeometry {
+    fn drop(&mut self) {
+        let device = &self.vcontext.device;
+        unsafe {
+            let _ = device.device_wait_idle();
+            device.destroy_pipeline_layout(self.pipeline_layout, None);
+            device.destroy_pipeline(self.pipeline, None);
+        }
+    }
 }
 
 impl RenderGeometry {
@@ -137,16 +148,5 @@ impl RenderGeometry {
         }
 
         (pipelines[0], pipeline_layout)
-    }
-}
-
-impl Drop for RenderGeometry {
-    fn drop(&mut self) {
-        let device = &self.vcontext.device;
-        unsafe {
-            let _ = device.device_wait_idle();
-            device.destroy_pipeline_layout(self.pipeline_layout, None);
-            device.destroy_pipeline(self.pipeline, None);
-        }
     }
 }

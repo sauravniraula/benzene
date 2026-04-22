@@ -52,6 +52,27 @@ pub struct Vcontext {
     pub state: RefCell<VcontextState>,
 }
 
+impl Drop for Vcontext {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = self.device.device_wait_idle();
+            let state = self.state.borrow();
+
+            for &each in &state.swapchain_image_views {
+                self.device.destroy_image_view(each, None);
+            }
+            self.swapchain_device
+                .destroy_swapchain(state.swapchain, None);
+
+            self.device.destroy_device(None);
+            self.surface_instance.destroy_surface(self.surface, None);
+            self.debug_utils_loader
+                .destroy_debug_utils_messenger(self.debug_messenger, None);
+            self.instance.destroy_instance(None);
+        }
+    }
+}
+
 impl Vcontext {
     pub fn new(
         mut extensions: Vec<&CStr>,
@@ -207,27 +228,6 @@ impl Vcontext {
         state.swapchain_image_views = swapchain_image_views;
         state.surface_capabilities = surface_capabilities;
         state.image_count = image_count;
-    }
-}
-
-impl Drop for Vcontext {
-    fn drop(&mut self) {
-        unsafe {
-            let _ = self.device.device_wait_idle();
-            let state = self.state.borrow();
-
-            for &each in &state.swapchain_image_views {
-                self.device.destroy_image_view(each, None);
-            }
-            self.swapchain_device
-                .destroy_swapchain(state.swapchain, None);
-
-            self.device.destroy_device(None);
-            self.surface_instance.destroy_surface(self.surface, None);
-            self.debug_utils_loader
-                .destroy_debug_utils_messenger(self.debug_messenger, None);
-            self.instance.destroy_instance(None);
-        }
     }
 }
 
