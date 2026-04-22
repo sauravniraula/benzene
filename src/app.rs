@@ -3,10 +3,7 @@ use std::{ffi::CStr, sync::Arc};
 use crate::{
     backend::{render_loop::RenderLoop, vcontext::Vcontext},
     log_info,
-    render::{
-        egui_integration::EguiIntegration,
-        owner::RenderOwner,
-    },
+    render::{egui_integration::EguiIntegration, owner::RenderOwner},
 };
 use ash_window;
 use winit::{
@@ -100,7 +97,7 @@ impl winit::application::ApplicationHandler for App {
             }
             winit::event::WindowEvent::RedrawRequested => {
                 let success = render_loop.draw(|render_context| {
-                    egui_integration.render(window);
+                    egui_integration.render(window, &render_context);
 
                     render_owner.render(render_context);
                 });

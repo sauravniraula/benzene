@@ -5,7 +5,9 @@ use egui_ash_renderer::{DynamicRendering, Options, Renderer};
 use egui_winit;
 use winit;
 
-use crate::backend::{command_buffer::create_command_pool, vcontext::Vcontext};
+use crate::backend::{
+    command_buffer::create_command_pool, render_loop::RenderContext, vcontext::Vcontext,
+};
 
 pub struct EguiIntegration {
     pub ctx: egui::Context,
@@ -63,7 +65,11 @@ impl EguiIntegration {
         }
     }
 
-    pub fn render(&mut self, window: &winit::window::Window) {
+    pub fn render(
+        &mut self,
+        window: &winit::window::Window,
+        render_context: &RenderContext,
+    ) {
         let raw_input = self.state.take_egui_input(window);
 
         if !self.textures_to_free.is_empty() {
@@ -97,5 +103,18 @@ impl EguiIntegration {
                 )
                 .expect("unable to set textures")
         }
+
+        let clipped_primitives = self.ctx.tessellate(output.shapes, output.pixels_per_point);
+
+        self.renderer.cmd_draw(
+            render_context.cmd,
+            self.vcontext
+                .state
+                .borrow()
+                .surface_capabilities
+                .current_extent,
+            output.pixels_per_point,
+            &clipped_primitives,
+        );
     }
 }
