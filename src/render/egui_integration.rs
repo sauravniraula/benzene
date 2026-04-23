@@ -5,18 +5,21 @@ use egui_ash_renderer::{DynamicRendering, Options, Renderer};
 use egui_winit;
 use winit;
 
-use crate::backend::{
-    command_buffer::create_command_pool, render_loop::RenderContext, vcontext::Vcontext,
+use crate::{
+    backend::{
+        command_buffer::create_command_pool, render_loop::RenderContext, vcontext::Vcontext,
+    },
+    render::scene::Scene,
 };
 
 pub struct EguiIntegration {
+    pub vcontext: Arc<Vcontext>,
     pub ctx: egui::Context,
     pub state: egui_winit::State,
     pub renderer: Renderer,
     pub textures_to_free: Vec<egui::TextureId>,
     pub command_pool: ash::vk::CommandPool,
-    // Keep the Vulkan context last so the device outlives renderer teardown.
-    pub vcontext: Arc<Vcontext>,
+    pub scene: Arc<Scene>,
 }
 
 impl Drop for EguiIntegration {
@@ -30,7 +33,7 @@ impl Drop for EguiIntegration {
 }
 
 impl EguiIntegration {
-    pub fn new(vcontext: Arc<Vcontext>, window: &winit::window::Window) -> Self {
+    pub fn new(vcontext: Arc<Vcontext>, window: &winit::window::Window, scene: Arc<Scene>) -> Self {
         let ctx = egui::Context::default();
         let state = egui_winit::State::new(
             ctx.clone(),
@@ -41,6 +44,9 @@ impl EguiIntegration {
             None,
         );
 
+        let mut options = Options::default();
+        options.in_flight_frames = vcontext.state.borrow().image_count as usize;
+
         let renderer = Renderer::with_default_allocator(
             &vcontext.instance,
             vcontext.physical_device,
@@ -49,27 +55,24 @@ impl EguiIntegration {
                 color_attachment_format: vcontext.surface_format.format,
                 depth_attachment_format: None,
             },
-            Options::default(),
+            options,
         )
         .expect("unable to create egui renderer");
 
         let command_pool = create_command_pool(&vcontext.device, vcontext.graphics_queue_index);
 
         Self {
+            vcontext,
             ctx,
             state,
             renderer,
             textures_to_free: vec![],
             command_pool,
-            vcontext,
+            scene,
         }
     }
 
-    pub fn render(
-        &mut self,
-        window: &winit::window::Window,
-        render_context: &RenderContext,
-    ) {
+    pub fn render(&mut self, window: &winit::window::Window, render_context: &RenderContext) {
         let raw_input = self.state.take_egui_input(window);
 
         if !self.textures_to_free.is_empty() {
@@ -78,14 +81,7 @@ impl EguiIntegration {
                 .expect("failed to free textures");
         }
 
-        let output = self.ctx.run(raw_input, |ctx| {
-
-            egui::Window::new("Managed texture")
-            .show(ctx, |ui| {
-                ui.label("This texture is loaded and managed by egui. Loaders must be installed for it to work.");
-            });
-
-        });
+        let output = self.build_ui(raw_input);
 
         self.state
             .handle_platform_output(window, output.platform_output);
@@ -105,16 +101,37 @@ impl EguiIntegration {
         }
 
         let clipped_primitives = self.ctx.tessellate(output.shapes, output.pixels_per_point);
+        let extent = self
+            .vcontext
+            .state
+            .borrow()
+            .surface_capabilities
+            .current_extent;
 
-        self.renderer.cmd_draw(
-            render_context.cmd,
-            self.vcontext
-                .state
-                .borrow()
-                .surface_capabilities
-                .current_extent,
-            output.pixels_per_point,
-            &clipped_primitives,
-        );
+        self.renderer
+            .cmd_draw(
+                render_context.cmd,
+                extent,
+                output.pixels_per_point,
+                &clipped_primitives,
+            )
+            .expect("failed to record egui render command");
+    }
+
+    fn build_ui(&mut self, raw_input: egui::RawInput) -> egui::FullOutput {
+        let frame_state = self.scene.frame_state.borrow_mut();
+
+        self.ctx.run(raw_input, |_| {
+            egui::SidePanel::right("right-side-panel")
+                .default_width(200.0)
+                .resizable(true)
+                .show(&self.ctx, |ui| {
+                    ui.take_available_width();
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        ui.take_available_width();
+                        ui.label(format!("FPS: {}", frame_state.fps));
+                    });
+                });
+        })
     }
 }

@@ -3,7 +3,7 @@ use std::{ffi::CStr, sync::Arc};
 use crate::{
     backend::{render_loop::RenderLoop, vcontext::Vcontext},
     log_info,
-    render::{egui_integration::EguiIntegration, owner::RenderOwner},
+    render::{egui_integration::EguiIntegration, scene::Scene},
 };
 use ash_window;
 use winit::{
@@ -15,14 +15,13 @@ pub struct App {
     window: Option<winit::window::Window>,
     vcontext: Option<Arc<Vcontext>>,
     render_loop: Option<RenderLoop>,
-    render_owner: Option<RenderOwner>,
     egui_integration: Option<EguiIntegration>,
+    scene: Option<Arc<Scene>>,
 }
 
 impl Drop for App {
     fn drop(&mut self) {
         self.egui_integration.take();
-        self.render_owner.take();
         self.render_loop.take();
         self.vcontext.take();
         self.window.take();
@@ -32,12 +31,13 @@ impl Drop for App {
 impl App {
     pub fn new() -> Self {
         let event_loop = winit::event_loop::EventLoop::new().expect("failed to create event loop");
+
         let mut app = Self {
             window: None,
             vcontext: None,
             render_loop: None,
-            render_owner: None,
             egui_integration: None,
+            scene: None,
         };
         event_loop
             .run_app(&mut app)
@@ -71,12 +71,17 @@ impl winit::application::ApplicationHandler for App {
             display_handle,
             window_handle,
         ));
+        let scene = Arc::new(Scene::new(vcontext.clone()));
 
-        self.render_owner = Some(RenderOwner::new(vcontext.clone()));
         self.render_loop = Some(RenderLoop::new(vcontext.clone()));
-        self.egui_integration = Some(EguiIntegration::new(vcontext.clone(), &window));
+        self.egui_integration = Some(EguiIntegration::new(
+            vcontext.clone(),
+            &window,
+            scene.clone(),
+        ));
         self.window = Some(window);
         self.vcontext = Some(vcontext);
+        self.scene = Some(scene);
     }
 
     fn window_event(
@@ -88,8 +93,13 @@ impl winit::application::ApplicationHandler for App {
         let window = self.window.as_ref().unwrap();
         let vcontext = self.vcontext.as_ref().unwrap();
         let render_loop = self.render_loop.as_mut().unwrap();
-        let render_owner = self.render_owner.as_ref().unwrap();
         let egui_integration = self.egui_integration.as_mut().unwrap();
+        let scene = self.scene.as_ref().unwrap();
+
+        let egui_response = egui_integration.state.on_window_event(window, &event);
+        if egui_response.repaint {
+            window.request_redraw();
+        }
 
         match event {
             winit::event::WindowEvent::CloseRequested => {
@@ -98,13 +108,12 @@ impl winit::application::ApplicationHandler for App {
             winit::event::WindowEvent::RedrawRequested => {
                 let success = render_loop.draw(|render_context| {
                     egui_integration.render(window, &render_context);
-
-                    render_owner.render(render_context);
+                    scene.render(&render_context);
                 });
                 if !success {
                     vcontext.recreate_swapchain();
                 }
-                self.window.as_ref().unwrap().request_redraw();
+                window.request_redraw();
             }
             _ => (),
         }

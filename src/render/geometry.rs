@@ -10,6 +10,7 @@ pub struct RenderGeometry {
     vcontext: Arc<Vcontext>,
     pub pipeline: ash::vk::Pipeline,
     pub pipeline_layout: ash::vk::PipelineLayout,
+    pub ubo_set_layout: ash::vk::DescriptorSetLayout,
 }
 
 impl Drop for RenderGeometry {
@@ -25,20 +26,25 @@ impl Drop for RenderGeometry {
 
 impl RenderGeometry {
     pub fn new(vcontext: Arc<Vcontext>) -> Self {
-        let (pipeline, pipeline_layout) =
+        let (pipeline, pipeline_layout, ubo_set_layout) =
             RenderGeometry::create_graphics_pipeline(&vcontext.device, vcontext.surface_format);
 
         Self {
             vcontext,
             pipeline,
             pipeline_layout,
+            ubo_set_layout,
         }
     }
 
     fn create_graphics_pipeline(
         device: &ash::Device,
         surface_format: ash::vk::SurfaceFormatKHR,
-    ) -> (ash::vk::Pipeline, ash::vk::PipelineLayout) {
+    ) -> (
+        ash::vk::Pipeline,
+        ash::vk::PipelineLayout,
+        ash::vk::DescriptorSetLayout,
+    ) {
         let vs_path = compiled_spirv_path_for_source("assets/shaders/test.vert");
         let fs_path = compiled_spirv_path_for_source("assets/shaders/test.frag");
 
@@ -114,9 +120,25 @@ impl RenderGeometry {
             .logic_op(ash::vk::LogicOp::COPY)
             .attachments(&color_blend_attachments);
 
+        let bindings = [ash::vk::DescriptorSetLayoutBinding::default()
+            .binding(0)
+            .descriptor_type(ash::vk::DescriptorType::UNIFORM_BUFFER)
+            .descriptor_count(1)
+            .stage_flags(ash::vk::ShaderStageFlags::VERTEX)];
+
+        let set_layout_info = ash::vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        let ubo_set_layout = unsafe {
+            device
+                .create_descriptor_set_layout(&set_layout_info, None)
+                .expect("unable to create descriptor layout")
+        };
+
+        let pipeline_layout_info = ash::vk::PipelineLayoutCreateInfo::default()
+            .set_layouts(std::slice::from_ref(&ubo_set_layout));
+
         let pipeline_layout = unsafe {
             device
-                .create_pipeline_layout(&ash::vk::PipelineLayoutCreateInfo::default(), None)
+                .create_pipeline_layout(&pipeline_layout_info, None)
                 .expect("unable to create pipeline layout")
         };
 
@@ -147,6 +169,6 @@ impl RenderGeometry {
             device.destroy_shader_module(fs_module, None);
         }
 
-        (pipelines[0], pipeline_layout)
+        (pipelines[0], pipeline_layout, ubo_set_layout)
     }
 }

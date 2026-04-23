@@ -6,13 +6,14 @@ use crate::{
 };
 
 pub struct Mesh {
+    vcontext: Arc<Vcontext>,
     pub vertices: Vec<Vertex3D>,
     pub vertex_buffer: ash::vk::Buffer,
     pub vertex_memory: ash::vk::DeviceMemory,
 }
 
 impl Mesh {
-    pub fn new(vcontext: &Arc<Vcontext>, vertices: Vec<Vertex3D>) -> Self {
+    pub fn new(vcontext: Arc<Vcontext>, vertices: Vec<Vertex3D>) -> Self {
         let vertices_len = vertices.len() as u64;
         let vertex_size = vertices_len * Vertex3D::size();
 
@@ -43,14 +44,25 @@ impl Mesh {
         }
 
         Self {
+            vcontext,
             vertices,
             vertex_buffer,
             vertex_memory,
         }
     }
 
-    pub fn drop(&self, vcontext: &Arc<Vcontext>) {
-        let device = &vcontext.device;
+    pub fn draw(&self, cmd: ash::vk::CommandBuffer) {
+        let device = &self.vcontext.device;
+        unsafe {
+            device.cmd_bind_vertex_buffers(cmd, 0, &[self.vertex_buffer], &[0]);
+            device.cmd_draw(cmd, self.vertices.len() as u32, 1, 0, 0);
+        };
+    }
+}
+
+impl Drop for Mesh {
+    fn drop(&mut self) {
+        let device = &self.vcontext.device;
         unsafe {
             let _ = device.device_wait_idle();
             device.free_memory(self.vertex_memory, None);
